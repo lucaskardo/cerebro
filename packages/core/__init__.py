@@ -17,6 +17,7 @@ class Config:
     ANTHROPIC_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     SERPAPI_KEY: str = os.getenv("SERPAPI_KEY", "")
     RESEND_KEY: str = os.getenv("RESEND_API_KEY", "")
+    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "carlos@dolarafuera.co")
     DAILY_BUDGET: float = float(os.getenv("DAILY_BUDGET_USD", "30.0"))
     PRIMARY_DOMAIN: str = os.getenv("PRIMARY_DOMAIN", "dolarafuera.co")
     

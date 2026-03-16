@@ -2,6 +2,7 @@
 CEREBRO v7 — AI Client
 All LLM calls go through here. Cost tracking + circuit breaker built in.
 """
+import asyncio
 import json
 import re
 import httpx
@@ -30,6 +31,7 @@ async def complete(
     json_mode: bool = False,
     pipeline_step: str = None,
     run_id: str = None,
+    _retry: int = 3,
 ) -> dict:
     """Call Claude API with automatic cost tracking.
     
@@ -65,6 +67,12 @@ async def complete(
             raise AIError("LLM request timed out (120s)")
     
     if resp.status_code == 429:
+        if _retry > 0:
+            wait = 60 * (4 - _retry)  # 60s, 120s, 180s
+            logger.warning(f"Rate limited. Retrying in {wait}s ({_retry} retries left)...")
+            await asyncio.sleep(wait)
+            return await complete(prompt, system, model, max_tokens, temperature,
+                                  json_mode, pipeline_step, run_id, _retry=_retry - 1)
         raise RateLimitError("Anthropic rate limit")
     if resp.status_code >= 400:
         raise AIError(f"API {resp.status_code}: {resp.text[:300]}")

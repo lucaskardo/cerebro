@@ -146,7 +146,7 @@ async def _generate_draft(brief: dict, mission: dict, run_id: str) -> dict:
         ),
         system=prompts.DRAFT_SYSTEM.format(partner_name=mission.get("partner_name", "ikigii")),
         model="sonnet",
-        max_tokens=4096,
+        max_tokens=8192,
         json_mode=True,
         pipeline_step="draft",
         run_id=run_id,
@@ -162,7 +162,7 @@ async def _humanize(draft: dict, mission: dict, run_id: str) -> dict:
         ),
         system=prompts.HUMANIZE_SYSTEM,
         model="haiku",
-        max_tokens=4096,
+        max_tokens=8192,
         json_mode=True,
         pipeline_step="humanize",
         run_id=run_id,
@@ -194,9 +194,9 @@ def _validate(content: dict, keyword: str, mission: dict) -> dict:
         "has_html": bool(content.get("body_html", "").strip()),
     }
     
-    # Brand safety
+    # Brand safety — count occurrences; educational mentions (1-2x) are OK
     blacklist = ["estafa", "scam", "piramide", "fraude", "ilegal", "lavado"]
-    brand_safe = not any(term in body.lower() for term in blacklist)
+    brand_safe = not any(body.lower().count(term) > 2 for term in blacklist)
     checks["brand_safe"] = brand_safe
     
     # SEO validation

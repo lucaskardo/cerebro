@@ -37,9 +37,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://*.vercel.app",
         f"https://{config.PRIMARY_DOMAIN}",
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,6 +70,8 @@ class LeadCapture(BaseModel):
     intent_score: int = 0
     quiz_responses: dict = {}
     mission_id: Optional[str] = None
+    # Calculator-specific fields
+    calculator_data: Optional[dict] = None
 
 
 # ============================================
@@ -162,6 +164,22 @@ async def list_content(status: Optional[str] = None, limit: int = 50):
         params["status"] = f"eq.{status}"
     return await db.query("content_assets", params=params)
 
+@app.get("/api/content/by-slug/{slug}")
+async def get_content_by_slug(slug: str):
+    # Public: serve approved; fallback to review for preview
+    results = await db.query("content_assets", params={
+        "select": "*", "slug": f"eq.{slug}",
+        "status": "eq.approved"
+    })
+    if not results:
+        results = await db.query("content_assets", params={
+            "select": "*", "slug": f"eq.{slug}",
+            "status": "in.(review,approved)"
+        })
+    if not results:
+        raise HTTPException(404, "Article not found")
+    return results[0]
+
 @app.get("/api/content/{aid}")
 async def get_content(aid: str):
     a = await db.get_by_id("content_assets", aid)
@@ -194,14 +212,17 @@ async def list_leads(limit: int = 50):
     })
 
 @app.post("/api/leads/capture")
-async def capture_lead(lead: LeadCapture):
-    """Public endpoint for lead capture forms."""
-    # Get default mission if not specified
+async def capture_lead(lead: LeadCapture, bg: BackgroundTasks):
+    """Public endpoint for lead capture forms. Triggers welcome email."""
     mission_id = lead.mission_id
     if not mission_id:
         missions = await db.get("missions", status="eq.active", limit="1")
         mission_id = missions[0]["id"] if missions else None
-    
+
+    quiz = lead.quiz_responses or {}
+    if lead.calculator_data:
+        quiz["calculator"] = lead.calculator_data
+
     result = await db.insert("leads", {
         "mission_id": mission_id,
         "email": lead.email,
@@ -212,14 +233,43 @@ async def capture_lead(lead: LeadCapture):
         "utm_medium": lead.utm_medium,
         "tema_interes": lead.tema_interes,
         "intent_score": lead.intent_score,
-        "quiz_responses": lead.quiz_responses,
+        "quiz_responses": quiz,
     })
-    
+
     if result:
-        await create_alert("new_lead", f"Nuevo lead: {lead.email} (score: {lead.intent_score})", 
-                          action_url="/dashboard/leads")
-    
+        await create_alert(
+            "new_lead",
+            f"Nuevo lead: {lead.email} (score: {lead.intent_score})",
+            action_url="/dashboard/leads",
+        )
+        # Fire-and-forget email in background
+        bg.add_task(_send_lead_email, lead)
+
     return {"status": "captured", "id": result["id"] if result else None}
+
+
+async def _send_lead_email(lead: LeadCapture):
+    """Send appropriate welcome email based on lead source."""
+    from packages.email import send_welcome_email, send_calculator_results_email
+    try:
+        calc = lead.calculator_data
+        if calc and calc.get("monto_mensual"):
+            await send_calculator_results_email(
+                email=lead.email,
+                nombre=lead.nombre,
+                monto_mensual=float(calc.get("monto_mensual", 0)),
+                metodo=calc.get("metodo", "método actual"),
+                perdida_anual=float(calc.get("perdida_anual", 0)),
+                ahorro_potencial=float(calc.get("ahorro_potencial", 0)),
+            )
+        else:
+            await send_welcome_email(
+                email=lead.email,
+                nombre=lead.nombre,
+                tema=lead.tema_interes,
+            )
+    except Exception as e:
+        logger.error(f"Email send failed for {lead.email}: {e}")
 
 
 # ============================================
@@ -270,6 +320,18 @@ async def list_demand_signals(processed: Optional[bool] = None):
     if processed is not None:
         params["processed"] = f"eq.{str(processed).lower()}"
     return await db.query("demand_signals", params=params)
+
+
+@app.get("/api/sitemap")
+async def sitemap():
+    """Public article list for sitemap generation."""
+    results = await db.query("content_assets", params={
+        "select": "slug,updated_at",
+        "status": "in.(approved,review)",
+        "asset_type": "eq.article",
+        "order": "updated_at.desc",
+    })
+    return results
 
 
 if __name__ == "__main__":
