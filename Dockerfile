@@ -6,4 +6,4 @@ COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 COPY .env.example .
 EXPOSE 8000
-CMD ["python", "-m", "uvicorn", "apps.api.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn apps.api.app.main:app --host 0.0.0.0 --port ${PORT:-8000}
