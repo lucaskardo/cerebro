@@ -119,6 +119,59 @@ export interface Funnel {
   conversion_rate: number;
 }
 
+export interface Persona {
+  id: string;
+  site_id: string;
+  name: string;
+  age: number | null;
+  city: string | null;
+  backstory: string | null;
+  personality_traits: Record<string, string>;
+  visual_prompt: string | null;
+  platforms: Record<string, unknown>;
+  posting_schedule: Record<string, unknown>;
+  content_ratio: Record<string, unknown>;
+  anti_detection_rules: Record<string, unknown>;
+  status: "active" | "inactive" | "suspended";
+  created_at: string;
+}
+
+export interface PersonaIdentity {
+  id: string;
+  persona_id: string;
+  platform: string;
+  handle_or_email: string | null;
+  password_encrypted: string | null;   // always "••••••••" unless revealed
+  password_plaintext?: string;          // only present after reveal
+  recovery_email: string | null;
+  recovery_phone: string | null;
+  api_keys: Record<string, string>;
+  two_factor_secret: string | null;
+  notes: string | null;
+  status: "active" | "suspended" | "pending_setup";
+  last_used_at: string | null;
+  created_at: string;
+}
+
+export interface SocialQueueItem {
+  id: string;
+  content_asset_id: string | null;
+  persona_id: string;
+  platform: string;
+  content_type: string;
+  content_text: string;
+  image_prompt: string | null;
+  audio_url: string | null;
+  video_url: string | null;
+  status: "draft" | "scheduled" | "published" | "failed" | "rejected";
+  scheduled_at: string | null;
+  published_at: string | null;
+  created_at: string;
+  // joined
+  personas?: { name: string };
+  content_assets?: { title: string; slug: string };
+}
+
 export const api = {
   status: () => fetchAPI<Status>("/api/status"),
   budget: () => fetchAPI<Budget>("/api/budget"),
@@ -136,6 +189,26 @@ export const api = {
   relatedContent: (limit = 5) => fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
   contentBySite: (siteId: string, limit = 20) =>
     fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
+  personas: (siteId?: string) =>
+    fetchAPI<Persona[]>(`/api/personas${siteId ? `?site_id=${siteId}` : ""}`),
+  personaIdentities: (personaId: string) =>
+    fetchAPI<PersonaIdentity[]>(`/api/personas/${personaId}/identities`),
+  personaIdentitiesRevealed: (personaId: string, masterKey: string) =>
+    fetch(`${API_URL}/api/personas/${personaId}/identities?reveal=true`, {
+      headers: { "x-master-key": masterKey },
+      cache: "no-store",
+    }).then((r) => {
+      if (!r.ok) throw new Error(`Reveal failed: ${r.status}`);
+      return r.json() as Promise<PersonaIdentity[]>;
+    }),
+  socialQueue: (params?: { persona_id?: string; platform?: string; status?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.persona_id) q.set("persona_id", params.persona_id);
+    if (params?.platform) q.set("platform", params.platform);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    return fetchAPI<SocialQueueItem[]>(`/api/social/queue${q.toString() ? `?${q}` : ""}`);
+  },
 };
 
 export async function approveStrategy(id: string): Promise<Strategy> {
@@ -174,5 +247,61 @@ export async function captureLead(data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`Lead capture failed: ${res.status}`);
+  return res.json();
+}
+
+export async function updatePersona(id: string, data: Partial<Persona>): Promise<Persona> {
+  const res = await fetch(`${API_URL}/api/personas/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Update persona failed: ${res.status}`);
+  return res.json();
+}
+
+export async function createIdentity(
+  personaId: string,
+  data: {
+    platform: string;
+    handle_or_email?: string;
+    password?: string;
+    recovery_email?: string;
+    notes?: string;
+    status?: string;
+  }
+): Promise<PersonaIdentity> {
+  const res = await fetch(`${API_URL}/api/personas/${personaId}/identities`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Create identity failed: ${res.status}`);
+  return res.json();
+}
+
+export async function updateIdentity(
+  id: string,
+  data: Partial<PersonaIdentity & { password?: string }>
+): Promise<PersonaIdentity> {
+  const res = await fetch(`${API_URL}/api/personas/identities/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Update identity failed: ${res.status}`);
+  return res.json();
+}
+
+export async function updateQueueItem(
+  id: string,
+  data: { status?: string; scheduled_at?: string; notes?: string }
+): Promise<SocialQueueItem> {
+  const res = await fetch(`${API_URL}/api/social/queue/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Update queue item failed: ${res.status}`);
   return res.json();
 }

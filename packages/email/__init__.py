@@ -11,13 +11,24 @@ logger = get_logger("email")
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
-async def send_email(to: str, subject: str, html: str, from_addr: str = None) -> bool:
+async def send_email(
+    to: str,
+    subject: str,
+    html: str,
+    from_addr: str = None,
+    from_email: str = None,   # alias for from_addr
+    from_name: str = None,    # display name for the sender
+) -> bool:
     """Send a transactional email via Resend."""
     if not config.RESEND_KEY:
         logger.warning(f"RESEND_API_KEY not set — skipping email to {to}")
         return False
 
-    from_addr = from_addr or config.EMAIL_FROM or "carlos@dolarafuera.co"
+    base_addr = from_email or from_addr or config.EMAIL_FROM or "noreply@dolarafuera.co"
+    if from_name:
+        full_from = f"{from_name} <{base_addr}>"
+    else:
+        full_from = base_addr
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
@@ -27,7 +38,7 @@ async def send_email(to: str, subject: str, html: str, from_addr: str = None) ->
                     "Authorization": f"Bearer {config.RESEND_KEY}",
                     "Content-Type": "application/json",
                 },
-                json={"from": from_addr, "to": to, "subject": subject, "html": html},
+                json={"from": full_from, "to": to, "subject": subject, "html": html},
             )
             if resp.status_code in (200, 201):
                 logger.info(f"Email sent to {to}: {subject}")

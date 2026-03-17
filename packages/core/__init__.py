@@ -20,6 +20,8 @@ class Config:
     SERPAPI_KEY: str = os.getenv("SERPAPI_KEY", "")
     RESEND_KEY: str = os.getenv("RESEND_API_KEY", "")
     GEMINI_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")   # Fernet key for credential encryption
+    MASTER_KEY: str = os.getenv("MASTER_KEY", "")            # Master key to reveal passwords
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "carlos@dolarafuera.co")
     DAILY_BUDGET: float = float(os.getenv("DAILY_BUDGET_USD", "30.0"))
     PRIMARY_DOMAIN: str = os.getenv("PRIMARY_DOMAIN", "dolarafuera.co")
