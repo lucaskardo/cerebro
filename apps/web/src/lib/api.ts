@@ -119,6 +119,7 @@ export const api = {
   goals: () => fetchAPI<Goal[]>("/api/goals"),
   strategies: (goalId?: string) => fetchAPI<Strategy[]>(`/api/strategies${goalId ? `?goal_id=${goalId}` : ""}`),
   funnel: (days = 30) => fetchAPI<Funnel>(`/api/attribution/funnel?days=${days}`),
+  relatedContent: (limit = 5) => fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
 };
 
 export async function approveStrategy(id: string): Promise<Strategy> {

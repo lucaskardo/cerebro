@@ -110,6 +110,14 @@ export default async function ArticlePage({
   const faqs = article.faq_section ?? [];
   const readingTime = Math.ceil((article.body_md?.split(" ").length ?? 0) / 200);
 
+  let related: Awaited<ReturnType<typeof api.relatedContent>> = [];
+  try {
+    const all = await api.relatedContent(20);
+    related = all.filter((a) => a.slug !== slug).slice(0, 4);
+  } catch {
+    related = [];
+  }
+
   return (
     <>
       {/* Schema markup */}
@@ -260,6 +268,27 @@ export default async function ArticlePage({
             </div>
           </div>
         </div>
+
+        {/* Related articles */}
+        {related.length > 0 && (
+          <section className="mt-12 pt-8 border-t border-slate-800">
+            <h2 className="text-lg font-bold text-slate-200 mb-4">También te puede interesar</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {related.map((r) => (
+                <a
+                  key={r.id}
+                  href={`/articulo/${r.slug}`}
+                  className="block bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 hover:border-slate-600 transition-all hover:bg-slate-800/80 group"
+                >
+                  <div className="text-sm font-medium text-slate-200 group-hover:text-white leading-snug line-clamp-2">
+                    {r.title}
+                  </div>
+                  <div className="text-xs text-slate-600 mt-2 font-mono">{r.keyword}</div>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </>
   );
