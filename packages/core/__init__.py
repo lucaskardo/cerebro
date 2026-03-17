@@ -15,6 +15,8 @@ class Config:
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
     ANTHROPIC_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    OPENAI_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    DEEPSEEK_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
     SERPAPI_KEY: str = os.getenv("SERPAPI_KEY", "")
     RESEND_KEY: str = os.getenv("RESEND_API_KEY", "")
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "carlos@dolarafuera.co")
