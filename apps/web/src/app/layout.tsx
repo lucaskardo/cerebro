@@ -61,6 +61,7 @@ export default async function RootLayout({
             <Link href="/execution" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Engine</Link>
             <Link href="/attribution" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Atribución</Link>
             <Link href="/personas" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Personas</Link>
+            <Link href="/intelligence" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Intelligence</Link>
             <div className="ml-auto flex items-center gap-3">
               <Suspense fallback={null}>
                 <BrandSelector sites={sites} />

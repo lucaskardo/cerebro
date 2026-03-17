@@ -143,6 +143,50 @@ async def run_worker(interval_seconds: int = 30):
 
 # ─── Built-in handlers ───────────────────────────────────────────────────────
 
+@register("skill_task")
+async def _handle_skill_task(payload: dict) -> dict:
+    """Run a single task by ID using the execution router logic."""
+    task_id = payload.get("task_id")
+    if not task_id:
+        raise ValueError("skill_task job missing task_id")
+    task = await db.get_by_id("tasks", task_id)
+    if not task:
+        raise ValueError(f"Task {task_id} not found")
+
+    from packages.skills import get_skill
+    skill = get_skill(task["skill_name"])
+    if not skill:
+        raise ValueError(f"Skill '{task['skill_name']}' not registered")
+
+    await db.update("tasks", task_id, {
+        "status": "running",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "attempts": task.get("attempts", 0) + 1,
+    })
+    try:
+        result = await skill.run_with_tracking(
+            task.get("input_json") or {},
+            task_id=task_id,
+            site_id=task.get("site_id"),
+        )
+        await db.update("tasks", task_id, {
+            "status": "completed",
+            "output_json": result if isinstance(result, dict) else {"result": str(result)},
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"task_id": task_id, "status": "completed"}
+    except Exception as e:
+        attempts = task.get("attempts", 0) + 1
+        max_attempts = 3
+        new_status = "dead_lettered" if attempts >= max_attempts else "retrying"
+        await db.update("tasks", task_id, {
+            "status": new_status,
+            "error": str(e)[:500],
+            "attempts": attempts,
+        })
+        raise
+
+
 @register("content_pipeline")
 async def _handle_content_pipeline(payload: dict) -> dict:
     from packages.content.pipeline import run_pipeline

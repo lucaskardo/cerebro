@@ -352,6 +352,11 @@ export const api = {
     if (site_id) q.set("site_id", site_id);
     return fetchAPI<Approval[]>(`/api/approvals?${q}`);
   },
+  cycleHistory: (limit = 10) =>
+    fetchAPI<Record<string, unknown>[]>(`/api/loop/history?limit=${limit}`),
+  loopStatus: () => fetchAPI<Record<string, unknown>>("/api/loop/status"),
+  knowledgeInsights: (limit = 12) =>
+    fetchAPI<Record<string, unknown>[]>(`/api/knowledge/insights?limit=${limit}`),
   socialQueue: (params?: { persona_id?: string; platform?: string; status?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.persona_id) q.set("persona_id", params.persona_id);

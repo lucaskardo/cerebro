@@ -33,6 +33,7 @@ class Config:
     DEMAND_ENGINE: bool = os.getenv("ENABLE_DEMAND_ENGINE", "false").lower() == "true"
     AUTOLOOP: bool = os.getenv("ENABLE_AUTOLOOP", "false").lower() == "true"
     SOCIAL_ENGINE: bool = os.getenv("ENABLE_SOCIAL_ENGINE", "false").lower() == "true"
+    LOOP_SCHEDULER_ENABLED: bool = os.getenv("LOOP_SCHEDULER_ENABLED", "false").lower() == "true"
 
 config = Config()
 

@@ -45,41 +45,86 @@ async def business_health():
     """Key business metrics — no auth required."""
     today = date.today().isoformat()
     week_ago = (date.today() - timedelta(days=7)).isoformat()
-
-    leads_today = await db.query("leads", params={
-        "select": "id", "created_at": f"gte.{today}T00:00:00Z"
-    })
-    leads_week = await db.query("leads", params={
-        "select": "id", "created_at": f"gte.{week_ago}T00:00:00Z"
-    })
-    articles_week = await db.query("content_assets", params={
-        "select": "id,title",
-        "status": "eq.approved",
-        "updated_at": f"gte.{week_ago}T00:00:00Z",
-    })
-    budget = await cost_tracker.check_budget()
-
-    # Jobs error rate (last 24h)
     day_ago = (date.today() - timedelta(days=1)).isoformat()
-    jobs_total = await db.query("jobs", params={
-        "select": "id,status",
-        "created_at": f"gte.{day_ago}T00:00:00Z",
-    })
-    failed = sum(1 for j in jobs_total if j.get("status") == "failed")
-    total = len(jobs_total)
-    error_rate = round(failed / total * 100, 1) if total > 0 else 0.0
 
-    top_asset = articles_week[0]["title"] if articles_week else None
+    from asyncio import gather
+    (
+        leads_today, leads_week, qualified_week, articles_week,
+        jobs_total, knowledge_week, last_cycle_rows,
+        worst_exp_rows, budget,
+    ) = await gather(
+        db.query("leads", params={"select": "id", "created_at": f"gte.{today}T00:00:00Z"}),
+        db.query("leads", params={"select": "id", "created_at": f"gte.{week_ago}T00:00:00Z"}),
+        db.query("leads", params={"select": "id", "current_status": "eq.qualified",
+                                   "created_at": f"gte.{week_ago}T00:00:00Z"}),
+        db.query("content_assets", params={"select": "id,title", "status": "eq.approved",
+                                            "updated_at": f"gte.{week_ago}T00:00:00Z"}),
+        db.query("jobs", params={"select": "id,status", "created_at": f"gte.{day_ago}T00:00:00Z"}),
+        db.query("knowledge_entries", params={"select": "id", "created_at": f"gte.{week_ago}T00:00:00Z"}),
+        db.query("cycle_runs", params={"select": "*", "order": "created_at.desc", "limit": "1"}),
+        db.query("experiments", params={"select": "id,hypothesis,outcome_json",
+                                         "status": "eq.evaluated",
+                                         "order": "evaluated_at.desc", "limit": "10"}),
+        cost_tracker.check_budget(),
+    )
+
+    # Error rate (last 24h)
+    failed = sum(1 for j in jobs_total if j.get("status") in ("failed", "dead_lettered"))
+    total_jobs = len(jobs_total)
+    error_rate = round(failed / total_jobs * 100, 1) if total_jobs > 0 else 0.0
+
+    # Revenue last 7 days from fact table
+    revenue_rows = await db.query("fact_daily_channel_performance", params={
+        "select": "revenue", "date": f"gte.{week_ago}",
+    })
+    revenue_7d = sum(float(r.get("revenue") or 0) for r in revenue_rows)
+
+    # Conversion rate 7d: qualified / total leads
+    total_leads_w = len(leads_week)
+    qualified_w = len(qualified_week)
+    conversion_rate_7d = round(qualified_w / total_leads_w * 100, 1) if total_leads_w > 0 else 0.0
+
+    # Worst experiment this week
+    worst_exp = None
+    for exp in worst_exp_rows:
+        outcome = exp.get("outcome_json") or {}
+        if isinstance(outcome, str):
+            try:
+                import json as _j; outcome = _j.loads(outcome)
+            except Exception:
+                outcome = {}
+        if outcome.get("decision") == "kill":
+            worst_exp = exp.get("hypothesis", "")[:80]
+            break
+
+    # Top opportunity
+    top_opp_rows = await db.query("opportunities", params={
+        "select": "query,pain_point,expected_value,confidence",
+        "execution_status": "eq.detected",
+        "order": "expected_value.desc",
+        "limit": "1",
+    })
+    top_opp = (top_opp_rows[0].get("query") or top_opp_rows[0].get("pain_point")) if top_opp_rows else None
+
+    last_cycle = last_cycle_rows[0] if last_cycle_rows else None
 
     return {
         "leads_today": len(leads_today),
         "leads_this_week": len(leads_week),
+        "qualified_leads_week": qualified_w,
+        "conversion_rate_7d": conversion_rate_7d,
         "articles_published_week": len(articles_week),
         "error_rate_24h": error_rate,
         "cost_today": budget["spent"],
-        "top_performing_asset_title": top_asset,
+        "revenue_7d": revenue_7d,
+        "top_performing_asset_title": articles_week[0]["title"] if articles_week else None,
+        "top_opportunity": top_opp,
+        "worst_experiment": worst_exp,
+        "knowledge_entries_this_week": len(knowledge_week),
         "budget_remaining": budget["remaining"],
         "budget_warning": budget["warning"],
+        "last_cycle_at": last_cycle["created_at"] if last_cycle else None,
+        "last_cycle_status": last_cycle["status"] if last_cycle else None,
     }
 
 
