@@ -170,8 +170,8 @@ async def send_calculator_results_email(
     <table style="width:100%;border-collapse:collapse;">
       <tr>
         <td style="padding:12px 0;border-bottom:1px solid #1e293b;">
-          <div style="color:#22c55e;font-weight:700;font-size:15px;">1. ikigii (Towerbank)</div>
-          <div style="color:#94a3b8;font-size:13px;margin-top:2px;">Cuenta USD desde Colombia. Fee: ~0.5%. Sin comisiones ocultas.</div>
+          <div style="color:#22c55e;font-weight:700;font-size:15px;">1. Cuenta USD offshore (banco panameño)</div>
+          <div style="color:#94a3b8;font-size:13px;margin-top:2px;">Cuenta bancaria real en USD desde Colombia. Fee: ~0.5%. Sin comisiones ocultas.</div>
         </td>
       </tr>
       <tr>
@@ -192,7 +192,7 @@ async def send_calculator_results_email(
     <div style="margin:32px 0;">
       <a href="https://dolarafuera.co/articulo/como-abrir-cuenta-en-dolares-desde-colombia"
          style="display:inline-block;background:#22c55e;color:#0f172a;font-weight:700;font-size:15px;padding:14px 28px;border-radius:8px;text-decoration:none;">
-        Abrir cuenta ikigii →
+        Ver guía: cómo abrir cuenta USD →
       </a>
     </div>
 

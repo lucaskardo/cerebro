@@ -346,30 +346,30 @@ ORDER BY date DESC;
 -- ============================================
 INSERT INTO missions (name, country, objective, partner_name, target_audience, core_topics, cta_config, budget_daily_usd)
 VALUES (
-    'ikigii Colombia',
+    'Finanzas LATAM',
     'Colombia',
-    'Generar leads calificados para descarga de app ikigii (Towerbank) entre colombianos interesados en finanzas internacionales',
-    'ikigii',
+    'Capturar leads calificados interesados en finanzas internacionales, protección cambiaria, y remesas en LATAM',
+    'Dólar Afuera',
     '{"segments": ["colombianos_exterior", "colombianos_remesas", "colombianos_inversion_usd", "colombianos_panama"], "age_range": "25-45", "pain_points": ["perdida_remesas", "acceso_usd", "proteccion_devaluacion", "banca_internacional"]}',
-    '["abrir cuenta en dolares", "remesas colombia", "dolares desde colombia", "cuenta panama", "cuenta offshore legal", "proteger ahorros devaluacion", "ikigii towerbank", "wise vs western union colombia", "transferir dolares"]',
-    '{"primary_cta": "Descarga ikigii", "cta_url": "https://ikigii.com/download", "mention_style": "natural", "max_mentions_per_article": 2, "disclosure": "Este artículo contiene enlaces de afiliado. Lee nuestra política editorial."}',
+    '["abrir cuenta en dolares", "remesas colombia", "dolares desde colombia", "cuenta panama", "cuenta offshore legal", "proteger ahorros devaluacion", "wise vs western union colombia", "transferir dolares", "finanzas internacionales latam"]',
+    '{"primary_cta": "Recibe nuestra guía gratis", "cta_url": "/suscribirse", "mention_style": "natural", "max_mentions_per_article": 2, "disclosure": "Este artículo es solo informativo. No constituye asesoría financiera."}',
     30.00
 ) ON CONFLICT DO NOTHING;
 
 INSERT INTO domain_sites (mission_id, domain, site_type)
 SELECT id, 'dolarafuera.co', 'editorial'
-FROM missions WHERE name = 'ikigii Colombia'
+FROM missions WHERE name = 'Finanzas LATAM'
 ON CONFLICT (domain) DO NOTHING;
 
 INSERT INTO clusters (mission_id, name, pillar_query, spokes)
 SELECT id, 'Abrir Cuenta USD', 'como abrir cuenta en dolares desde colombia',
     '["bancos panameños para colombianos", "documentos para abrir cuenta panama", "costo abrir cuenta usd", "cuenta dolares online colombia", "wise vs bancos para dolares"]'::jsonb
-FROM missions WHERE name = 'ikigii Colombia';
+FROM missions WHERE name = 'Finanzas LATAM';
 
 INSERT INTO clusters (mission_id, name, pillar_query, spokes)
 SELECT id, 'Remesas Colombia', 'como enviar remesas a colombia sin perder plata',
     '["western union vs wise colombia", "mejores apps remesas colombia", "calculadora remesas", "remesas cripto colombia", "costos ocultos remesas"]'::jsonb
-FROM missions WHERE name = 'ikigii Colombia';
+FROM missions WHERE name = 'Finanzas LATAM';
 
 INSERT INTO seo_rule_versions (version_tag, rules, active, notes)
 VALUES ('v2026.03', '{

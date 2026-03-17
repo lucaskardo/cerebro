@@ -107,10 +107,10 @@ CREATE INDEX IF NOT EXISTS idx_attribution_type ON attribution_events(event_type
 CREATE INDEX IF NOT EXISTS idx_channel_perf_date ON channel_performance(date);
 CREATE INDEX IF NOT EXISTS idx_compliance_mission ON compliance_rules(mission_id);
 
--- SEED: First goal for ikigii
+-- SEED: First goal
 INSERT INTO goals (mission_id, description, target_metric, target_value)
 SELECT id,
-    'Generar leads calificados para descarga de ikigii entre colombianos interesados en finanzas internacionales',
+    'Capturar leads calificados interesados en finanzas internacionales, protección cambiaria y remesas en LATAM',
     'qualified_leads_per_month',
     100
-FROM missions WHERE name = 'ikigii Colombia';
+FROM missions WHERE name = 'Finanzas LATAM';

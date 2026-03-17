@@ -1,6 +1,6 @@
 """
 CEREBRO v7 — Sprint 1 Content Generation
-Generates 5 articles for ikigii/Towerbank Colombia.
+Generates 5 articles for Dólar Afuera — finanzas internacionales para colombianos.
 Usage: python3 scripts/generate_sprint1.py
 """
 import asyncio
@@ -19,7 +19,7 @@ from packages.core import db, cost_tracker, config, get_logger
 
 logger = get_logger("sprint1")
 
-# 5 target keywords for ikigii / Towerbank Colombia
+# 5 target keywords for finanzas internacionales LATAM
 SPRINT1_KEYWORDS = [
     "como abrir cuenta en dolares desde colombia",
     "cuenta bancaria en panama para colombianos",
@@ -45,16 +45,16 @@ async def get_or_create_mission() -> str:
 
     print("  No active mission found. Creating...")
     mission = await db.insert("missions", {
-        "name": "ikigii — Towerbank para colombianos",
-        "slug": "ikigii-towerbank",
+        "name": "Finanzas LATAM",
+        "slug": "finanzas-latam",
         "country": "Colombia",
         "language": "es-CO",
-        "partner_name": "ikigii",
+        "partner_name": "Dólar Afuera",
         "status": "active",
         "primary_domain": config.PRIMARY_DOMAIN,
         "target_audience": {
-            "primary": "Colombianos 25-45 con ingresos en USD o que quieren acceder a USD",
-            "pain_points": ["devaluación COP", "restricciones DIAN", "acceso banca internacional"],
+            "primary": "Colombianos 25-45 interesados en finanzas internacionales, USD y remesas",
+            "pain_points": ["devaluación COP", "altas comisiones en remesas", "acceso banca internacional"],
             "goals": ["proteger ahorros", "abrir cuenta USD", "enviar/recibir remesas fácil"]
         },
         "core_topics": [
@@ -65,8 +65,8 @@ async def get_or_create_mission() -> str:
             "fintech internacional Colombia"
         ],
         "cta_config": {
-            "primary": "Abrir cuenta ikigii",
-            "url": "https://ikigii.com",
+            "primary": "Recibe nuestra guía gratis",
+            "url": "/suscribirse",
             "placement": "end_of_section_2_and_conclusion"
         },
         "daily_budget_usd": 10.0,

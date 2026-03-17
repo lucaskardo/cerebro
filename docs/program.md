@@ -29,7 +29,7 @@ NUNCA optimizar por tráfico solo, bounce rate, o vanity metrics.
 
 ### P2: CTA Copy y Posición  
 - Probar posición: párrafo 3 vs final vs después de H2
-- Probar copy: "Descarga ikigii" vs "Prueba gratis" vs "Abre tu cuenta en 5 min"
+- Probar copy: "Recibe la guía gratis" vs "Suscríbete gratis" vs "Descarga el comparativo"
 - Probar urgencia: "Hoy" vs sin fecha
 
 ### P3: Estructura
@@ -70,4 +70,4 @@ MEDIR → ANALIZAR → HIPÓTESIS → DEPLOY → ESPERAR (100 visits) → EVALUA
 
 - [2026-03-15] Sistema iniciado. Foco: headlines + CTA position.
 - Cluster prioritario: "abrir cuenta USD"
-- ikigii quiere enfatizar facilidad (< 5 minutos)
+- Foco en captura de email como conversión primaria

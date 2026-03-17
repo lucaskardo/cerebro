@@ -272,18 +272,16 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
 
             {/* Mid-article CTA box */}
             <div className="my-12 rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-500/5 to-transparent p-7">
-              <p className="font-ui text-xs font-semibold uppercase tracking-widest text-green-400 mb-2">Recomendado</p>
-              <p className="text-xl font-bold text-slate-100 mb-2">Abre tu cuenta en dólares desde Colombia</p>
+              <p className="font-ui text-xs font-semibold uppercase tracking-widest text-green-400 mb-2">Recurso gratuito</p>
+              <p className="text-xl font-bold text-slate-100 mb-2">Descarga el comparativo completo de cuentas USD</p>
               <p className="text-slate-400 text-sm mb-5">
-                ikigii (Towerbank Panamá) — sin comisiones de mantenimiento, sin requisitos de saldo mínimo. Usada por +15,000 colombianos.
+                Guía actualizada con los mejores bancos y fintechs para colombianos — fees reales, requisitos y paso a paso.
               </p>
               <a
-                href="https://ikigii.com"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="#email-capture"
                 className="inline-flex items-center gap-2 bg-green-500 hover:bg-green-400 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors font-ui"
               >
-                Abrir cuenta ikigii →
+                Recibe la guía gratis →
               </a>
             </div>
 
@@ -411,18 +409,16 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 </Suspense>
               </div>
 
-              {/* ikigii CTA card */}
+              {/* Guía gratuita CTA card */}
               <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-5">
-                <p className="font-ui text-xs font-semibold uppercase tracking-widest text-green-400 mb-3">Cuenta recomendada</p>
-                <p className="font-bold text-slate-200 text-sm mb-1">ikigii · Towerbank Panamá</p>
-                <p className="text-xs text-slate-400 mb-4">Cuenta USD para colombianos. Sin comisiones.</p>
+                <p className="font-ui text-xs font-semibold uppercase tracking-widest text-green-400 mb-3">Guía gratuita</p>
+                <p className="font-bold text-slate-200 text-sm mb-1">Comparativo de cuentas USD</p>
+                <p className="text-xs text-slate-400 mb-4">Las mejores opciones para colombianos — fees, requisitos y paso a paso.</p>
                 <a
-                  href="https://ikigii.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="#email-capture"
                   className="block w-full text-center bg-green-500 hover:bg-green-400 text-slate-900 font-bold text-sm py-2.5 rounded-xl transition-colors"
                 >
-                  Abrir cuenta →
+                  Descargar gratis →
                 </a>
               </div>
             </div>

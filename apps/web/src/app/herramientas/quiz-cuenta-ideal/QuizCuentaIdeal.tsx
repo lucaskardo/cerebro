@@ -77,12 +77,12 @@ function getRecommendation(answers: Answers) {
 
   if (perfil === "freelance" || objetivo === "recibir" || objetivo === "todo") {
     return {
-      title: "Cuenta ikigii (Towerbank Panamá)",
+      title: "Cuenta USD offshore (banco panameño)",
       subtitle: "La opción #1 para freelancers y emprendedores colombianos",
-      description: "Con ikigii obtienes una cuenta bancaria real en USD con número SWIFT/IBAN, puedes recibir pagos de PayPal, Stripe, Deel y cualquier empresa internacional. Sin comisiones de mantenimiento.",
+      description: "Con una cuenta bancaria real en USD obtienes número SWIFT/IBAN, puedes recibir pagos de PayPal, Stripe, Deel y cualquier empresa internacional. Sin comisiones de mantenimiento.",
       score: 95,
-      cta: "Abrir cuenta ikigii gratis",
-      ctaUrl: "https://ikigii.com",
+      cta: "Recibe la guía paso a paso gratis →",
+      ctaUrl: "#email-capture",
       color: "green",
     };
   }
@@ -100,12 +100,12 @@ function getRecommendation(answers: Answers) {
   }
 
   return {
-    title: "Cuenta ikigii (Towerbank Panamá)",
+    title: "Cuenta USD offshore",
     subtitle: "La opción más completa para tu perfil",
-    description: "Dado tu volumen y frecuencia, una cuenta bancaria real en USD es lo más conveniente. Con ikigii abres en 15 minutos desde Colombia, sin viajar a Panamá.",
+    description: "Dado tu volumen y frecuencia, una cuenta bancaria real en USD es lo más conveniente. Puedes abrirla en minutos desde Colombia, sin viajar al exterior.",
     score: 90,
-    cta: "Abrir cuenta ikigii gratis →",
-    ctaUrl: "https://ikigii.com",
+    cta: "Recibe el comparativo completo gratis →",
+    ctaUrl: "#email-capture",
     color: "green",
   };
 }

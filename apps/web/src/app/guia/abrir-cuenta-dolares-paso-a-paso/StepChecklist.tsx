@@ -81,12 +81,10 @@ export default function StepChecklist({ steps }: { steps: Step[] }) {
           <div className="text-2xl mb-2">🎉</div>
           <p className="text-sm text-green-400 font-medium">¡Completaste todos los pasos!</p>
           <a
-            href="https://ikigii.com"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#email-capture"
             className="inline-block mt-3 bg-green-500 hover:bg-green-400 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors"
           >
-            Abrir mi cuenta ahora →
+            Recibe el comparativo de bancos →
           </a>
         </div>
       )}

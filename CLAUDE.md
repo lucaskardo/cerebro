@@ -6,7 +6,7 @@ Content is ONE skill among many. The core purpose is: **generate qualified leads
 
 ## Current Code Status (What Works)
 - ✅ FastAPI backend with endpoints (apps/api/)
-- ✅ Supabase with 20 tables, seed data, ikigii mission
+- ✅ Supabase with 20 tables, seed data, Finanzas LATAM mission
 - ✅ Content pipeline: keyword → brief → draft → humanize → validate
 - ✅ AI client with cost tracking + $30/day circuit breaker
 - ✅ Next.js dashboard: overview, content list, leads, alerts

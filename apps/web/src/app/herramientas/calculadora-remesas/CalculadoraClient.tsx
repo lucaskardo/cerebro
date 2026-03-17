@@ -14,8 +14,8 @@ const METODOS = [
   { id: "wise", label: "Wise", fee: 0.012, color: "#22c55e" },
 ] as const;
 
-const OPTIMAL_FEE = 0.005; // ikigii / best fintech
-const IKIGII_FEE = 0.005;
+const OPTIMAL_FEE = 0.005; // mejor fintech / cuenta USD
+const BEST_FINTECH_FEE = 0.005;
 
 type MetodoId = (typeof METODOS)[number]["id"];
 
@@ -37,8 +37,8 @@ export default function CalculadoraClient() {
   const metodo = METODOS.find((m) => m.id === metodoId) ?? METODOS[0];
   const perdidaMensual = montoNum * metodo.fee;
   const perdidaAnual = perdidaMensual * 12;
-  const costoIkigii = montoNum * IKIGII_FEE * 12;
-  const ahorroAnual = perdidaAnual - costoIkigii;
+  const costoOptimo = montoNum * BEST_FINTECH_FEE * 12;
+  const ahorroAnual = perdidaAnual - costoOptimo;
   const porcentajeAhorro = metodo.fee > 0 ? ((metodo.fee - OPTIMAL_FEE) / metodo.fee) * 100 : 0;
 
   const calcData = {
@@ -189,16 +189,16 @@ export default function CalculadoraClient() {
                   </div>
                 );
               })}
-              {/* ikigii optimal */}
+              {/* Mejor fintech optimal */}
               <div>
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="font-bold text-green-400">ikigii (mejor opción) ✓</span>
-                  <span className="text-green-400">{formatUSD(costoIkigii)}/año</span>
+                  <span className="font-bold text-green-400">Mejor fintech (cuenta USD) ✓</span>
+                  <span className="text-green-400">{formatUSD(costoOptimo)}/año</span>
                 </div>
                 <div className="w-full bg-slate-700/50 rounded-full h-1.5">
                   <div
                     className="h-1.5 rounded-full bg-green-500"
-                    style={{ width: `${(IKIGII_FEE / METODOS[0].fee) * 100}%` }}
+                    style={{ width: `${(BEST_FINTECH_FEE / METODOS[0].fee) * 100}%` }}
                   />
                 </div>
               </div>
@@ -212,7 +212,7 @@ export default function CalculadoraClient() {
                 <p className="text-xs text-slate-600 mt-1">por año</p>
               </div>
               <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-4 text-center">
-                <p className="text-xs text-slate-500 mb-1">Ahorras con ikigii</p>
+                <p className="text-xs text-slate-500 mb-1">Ahorro potencial anual</p>
                 <p className="text-2xl font-bold text-green-400">{formatUSD(ahorroAnual)}</p>
                 <p className="text-xs text-slate-600 mt-1">{porcentajeAhorro.toFixed(0)}% menos</p>
               </div>
@@ -227,11 +227,11 @@ export default function CalculadoraClient() {
             <div className="space-y-3">
               {[
                 {
-                  name: "ikigii (Towerbank)",
-                  desc: "Cuenta USD en Panamá para colombianos. Fee real: ~0.5%. Sin comisiones de mantenimiento. Aceptan colombianos fácilmente.",
-                  badge: "RECOMENDADO",
+                  name: "Cuenta USD offshore (banco panameño)",
+                  desc: "Cuenta bancaria real en USD para colombianos. Fee real: ~0.5%. Sin comisiones de mantenimiento. Proceso 100% online.",
+                  badge: "MEJOR OPCIÓN",
                   badgeColor: "bg-green-500/20 text-green-400 border-green-500/30",
-                  href: "https://ikigii.com",
+                  href: "/guia/abrir-cuenta-dolares-paso-a-paso",
                 },
                 {
                   name: "Wise",
@@ -274,7 +274,7 @@ export default function CalculadoraClient() {
               intentScore={8}
               calculatorData={calcData as unknown as Record<string, unknown>}
               headline={`Recibe tu análisis completo por email`}
-              subheadline={`Te envío el desglose exacto de cuánto ahorras + guía paso a paso para abrir tu cuenta ikigii.`}
+              subheadline={`Te envío el desglose exacto de cuánto ahorras + guía paso a paso para abrir tu cuenta USD offshore.`}
               ctaText="Enviar mi análisis →"
               onSuccess={() => setEmailDone(true)}
             />

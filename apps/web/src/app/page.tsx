@@ -8,7 +8,7 @@ const SITE_URL = `https://${process.env.PRIMARY_DOMAIN || "dolarafuera.co"}`;
 export const metadata: Metadata = {
   title: "Dólar Afuera — Finanzas en USD para colombianos",
   description:
-    "Guías, herramientas y estrategias para colombianos que quieren cuentas en dólares, protección cambiaria y mejores remesas. Con ikigii y Towerbank Panamá.",
+    "Guías, herramientas y estrategias para colombianos que quieren cuentas en dólares, protección cambiaria y mejores remesas.",
   alternates: { canonical: SITE_URL },
   openGraph: {
     title: "Dólar Afuera — Finanzas en USD para colombianos",
@@ -75,10 +75,10 @@ const TOOLS = [
 ];
 
 const TRUST_SIGNALS = [
-  { text: "Ikigii · Towerbank Panamá", icon: "🏦" },
-  { text: "Regulado por SBP", icon: "✅" },
-  { text: "Sin comisiones de mantenimiento", icon: "💚" },
-  { text: "15,000+ colombianos", icon: "🇨🇴" },
+  { text: "Datos verificados semanalmente", icon: "✅" },
+  { text: "Sin conflictos de interés", icon: "🔍" },
+  { text: "Comparativas honestas", icon: "⚖️" },
+  { text: "+15,000 colombianos informados", icon: "🇨🇴" },
 ];
 
 export default async function HomePage() {
@@ -132,12 +132,10 @@ export default async function HomePage() {
               Explorar guías →
             </Link>
             <a
-              href="https://ikigii.com"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#email-capture"
               className="inline-block bg-green-500 hover:bg-green-400 text-slate-900 font-bold text-sm px-7 py-3.5 rounded-xl transition-colors"
             >
-              Abrir cuenta USD →
+              Recibe la guía gratis →
             </a>
           </div>
         </div>

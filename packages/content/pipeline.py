@@ -125,7 +125,7 @@ async def _generate_brief(keyword: str, brand: dict, run_id: str) -> dict:
         prompt=prompts.BRIEF_USER.format(
             keyword=keyword,
             country=brand.get("country", "Colombia"),
-            partner_name=brand.get("partner_name", "ikigii"),
+            partner_name=brand.get("partner_name", "Dólar Afuera"),
             target_audience=json.dumps(brand.get("target_audience", {}), ensure_ascii=False),
             core_topics=json.dumps(brand.get("core_topics", []), ensure_ascii=False),
             cta_config=json.dumps(brand.get("cta_config", {}), ensure_ascii=False),
@@ -178,7 +178,7 @@ async def _generate_draft(brief: dict, brand: dict, run_id: str) -> dict:
         system=prompts.DRAFT_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "Carlos Medina, especialista en finanzas internacionales"),
             brand_tone=brand.get("brand_tone", "amigo que sabe de finanzas, cercano"),
-            partner_name=brand.get("partner_name", "ikigii"),
+            partner_name=brand.get("partner_name", "Dólar Afuera"),
         ),
         model="sonnet",
         max_tokens=8192,
@@ -254,7 +254,7 @@ def _validate(content: dict, keyword: str, brand: dict) -> dict:
 def _build_brand_context(mission: dict, site: dict = None) -> dict:
     """Merge mission + site brand config into unified context for prompts."""
     base = {
-        "partner_name": mission.get("partner_name", "ikigii"),
+        "partner_name": mission.get("partner_name", "Dólar Afuera"),
         "country": mission.get("country", "Colombia"),
         "target_audience": mission.get("target_audience", {}),
         "core_topics": mission.get("core_topics", []),

@@ -1,0 +1,14 @@
+{
+  "name": "cerebro",
+  "version": "7.0.0",
+  "private": true,
+  "description": "CEREBRO - Sistema Autónomo de Tráfico y Generación de Leads",
+  "workspaces": ["apps/web"],
+  "scripts": {
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:api": "cd apps/api && uvicorn app.main:app --reload --port 8000",
+    "build:web": "cd apps/web && npm run build",
+    "db:push": "cd infra && cat ../schema.sql | pbcopy && echo 'Schema copied to clipboard - paste in Supabase SQL Editor'",
+    "setup": "npm install && cd apps/api && pip install -e '.[dev]'"
+  }
+}

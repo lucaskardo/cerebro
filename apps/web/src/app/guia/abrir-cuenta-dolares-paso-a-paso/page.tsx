@@ -21,7 +21,7 @@ const steps = [
   {
     n: 1,
     title: "Elige el banco correcto",
-    desc: "Para colombianos, Towerbank Panamá (a través de ikigii) es la opción más accesible: 100% online, sin visitar Panamá, sin monto mínimo de apertura.",
+    desc: "Para colombianos, un banco panameño online es la opción más accesible: 100% digital, sin visitar Panamá, sin monto mínimo de apertura.",
     detail: "Otros bancos como BAC, Banistmo o Global Bank requieren presencia física o referencias bancarias panameñas, lo que los hace inaccesibles para la mayoría.",
   },
   {
@@ -33,7 +33,7 @@ const steps = [
   {
     n: 3,
     title: "Completa el formulario online",
-    desc: "El proceso es 100% digital en ikigii.com. Tarda aproximadamente 15 minutos.",
+    desc: "El proceso es 100% digital. Tarda aproximadamente 15 minutos.",
     detail: "Llenas datos personales, subes fotos del documento y selfie. El sistema hace verificación automática de identidad (KYC).",
   },
   {
@@ -150,17 +150,15 @@ export default function GuiaPage() {
 
         {/* CTA */}
         <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-6">
-          <p className="text-sm font-bold text-green-400 mb-2">¿Listo para empezar?</p>
+          <p className="text-sm font-bold text-green-400 mb-2">¿Quieres el comparativo actualizado?</p>
           <p className="text-sm text-slate-400 mb-4">
-            ikigii es el proceso más rápido para colombianos. 100% online, aprobación en 24-72 horas.
+            Te enviamos el comparativo con los mejores bancos para colombianos, fees reales y requisitos actualizados.
           </p>
           <a
-            href="https://ikigii.com"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#email-capture"
             className="inline-block bg-green-500 hover:bg-green-400 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors"
           >
-            Abrir mi cuenta en dólares →
+            Recibir comparativo gratis →
           </a>
         </div>
 

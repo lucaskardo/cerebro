@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "CEREBRO v7 — Dashboard",
-  description: "Sistema autónomo de tráfico y leads — ikigii Colombia",
+  description: "Guías y herramientas para colombianos interesados en finanzas internacionales, protección cambiaria y remesas.",
 };
 
 export default async function RootLayout({

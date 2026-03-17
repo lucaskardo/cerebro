@@ -56,16 +56,16 @@ async def test_database():
         else:
             print("  No missions found. Creating test mission...")
             mission = await db.insert("missions", {
-                "name": "ikigii — Towerbank para colombianos",
-                "slug": "ikigii-towerbank",
+                "name": "Finanzas LATAM",
+                "slug": "finanzas-latam",
                 "country": "Colombia",
                 "language": "es-CO",
-                "partner_name": "ikigii",
+                "partner_name": "Dólar Afuera",
                 "status": "active",
                 "primary_domain": config.PRIMARY_DOMAIN,
                 "target_audience": {
-                    "primary": "Colombianos 25-45 con ingresos en USD o que quieren acceder a USD",
-                    "pain_points": ["devaluación COP", "restricciones DIAN", "acceso banca internacional"],
+                    "primary": "Colombianos 25-45 interesados en finanzas internacionales, USD y remesas",
+                    "pain_points": ["devaluación COP", "altas comisiones en remesas", "acceso banca internacional"],
                     "goals": ["proteger ahorros", "abrir cuenta USD", "enviar/recibir remesas fácil"]
                 },
                 "core_topics": [
@@ -76,8 +76,8 @@ async def test_database():
                     "fintech internacional Colombia"
                 ],
                 "cta_config": {
-                    "primary": "Abrir cuenta ikigii",
-                    "url": "https://ikigii.com",
+                    "primary": "Recibe nuestra guía gratis",
+                    "url": "/suscribirse",
                     "placement": "end_of_section_2_and_conclusion"
                 },
                 "daily_budget_usd": 5.0,

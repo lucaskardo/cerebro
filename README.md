@@ -1,6 +1,6 @@
 # CEREBRO v7 — AI Demand Generation Engine
 
-> An autonomous system that generates qualified leads for financial products through content, tools, and multi-channel distribution. Built for [ikigii](https://ikigii.com) (Towerbank Panamá) — targeting Colombians who want USD bank accounts, remittances, and financial protection.
+> An autonomous system that generates qualified leads through content, tools, and multi-channel distribution. Targets Colombians interested in international finance, USD accounts, remittances, and currency protection.
 
 **Live:**
 - Frontend → [dolarafuera.co](https://dolarafuera.co) (Vercel)
@@ -79,7 +79,7 @@ Three brands, each with its own persona and audience:
 | **Dolarízate** | dolarizate.co | Carlos Medina | Colombians protecting savings in USD | Green |
 | **Remesas.co** | remesas.co | Diego Restrepo | Migrants sending money home | Orange |
 
-All three brands funnel to ikigii account opens.
+All three brands funnel to email lead capture.
 
 ---
 

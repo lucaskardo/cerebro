@@ -155,15 +155,13 @@ export default function WiseVsWesternUnionPage() {
         <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-6">
           <div className="text-sm font-bold text-green-400 mb-2">¿La mejor alternativa a ambos?</div>
           <p className="text-sm text-slate-400 mb-4">
-            Si eres colombiano y quieres una cuenta en USD <strong className="text-slate-300">permanente</strong> — no solo para transferencias, sino para <strong className="text-slate-300">guardar dólares, recibir pagos internacionales y proteger tus ahorros</strong> — ikigii (Towerbank Panamá) es la opción más usada.
+            Si eres colombiano y quieres una cuenta en USD <strong className="text-slate-300">permanente</strong> — no solo para transferencias, sino para <strong className="text-slate-300">guardar dólares, recibir pagos internacionales y proteger tus ahorros</strong> — una cuenta offshore en banco panameño es la opción más completa.
           </p>
           <a
-            href="https://ikigii.com"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/guia/abrir-cuenta-dolares-paso-a-paso"
             className="inline-block bg-green-500 hover:bg-green-400 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors"
           >
-            Abrir cuenta ikigii gratis →
+            Ver guía: cómo abrir cuenta USD →
           </a>
         </div>
 
