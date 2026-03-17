@@ -73,6 +73,24 @@ class LeadCapture(BaseModel):
     # Calculator-specific fields
     calculator_data: Optional[dict] = None
 
+class GoalCreate(BaseModel):
+    description: str
+    target_metric: str
+    target_value: float
+    mission_id: Optional[str] = None
+
+class AttributionEvent(BaseModel):
+    event_type: str  # pageview, click, form_start, lead_capture, conversion
+    visitor_id: Optional[str] = None
+    session_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    asset_type: Optional[str] = None
+    channel: Optional[str] = None
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    metadata: dict = {}
+
 
 # ============================================
 # HEALTH & STATUS
@@ -332,6 +350,94 @@ async def sitemap():
         "order": "updated_at.desc",
     })
     return results
+
+
+# ============================================
+# GOALS
+# ============================================
+@app.post("/api/goals")
+async def create_goal(req: GoalCreate):
+    mission_id = req.mission_id
+    if not mission_id:
+        missions = await db.get("missions", status="eq.active", limit="1")
+        mission_id = missions[0]["id"] if missions else None
+    goal = await db.insert("goals", {
+        "mission_id": mission_id,
+        "description": req.description,
+        "target_metric": req.target_metric,
+        "target_value": req.target_value,
+        "status": "active",
+    })
+    return goal
+
+@app.get("/api/goals")
+async def list_goals():
+    return await db.query("goals", params={"select": "*", "order": "created_at.desc"})
+
+
+# ============================================
+# STRATEGIES
+# ============================================
+@app.post("/api/strategies/generate")
+async def generate_strategies_endpoint(goal_id: str):
+    budget = await cost_tracker.check_budget()
+    if budget["blocked"]:
+        raise HTTPException(429, "Daily LLM budget exceeded")
+    from packages.strategy import generate_strategies
+    return await generate_strategies(goal_id)
+
+@app.get("/api/strategies")
+async def list_strategies(goal_id: Optional[str] = None, status: Optional[str] = None):
+    params = {"select": "*", "order": "created_at.desc"}
+    if goal_id:
+        params["goal_id"] = f"eq.{goal_id}"
+    if status:
+        params["status"] = f"eq.{status}"
+    return await db.query("strategies", params=params)
+
+@app.post("/api/strategies/{sid}/approve")
+async def approve_strategy_endpoint(sid: str):
+    from packages.strategy import approve_strategy
+    s = await approve_strategy(sid)
+    if not s:
+        raise HTTPException(404, "Strategy not found")
+    return s
+
+@app.post("/api/strategies/{sid}/run")
+async def run_strategy(sid: str, bg: BackgroundTasks):
+    from packages.strategy import execute_strategy
+    bg.add_task(execute_strategy, sid)
+    return {"status": "running", "strategy_id": sid}
+
+
+# ============================================
+# ATTRIBUTION
+# ============================================
+@app.post("/api/attribution/event")
+async def attribution_event(req: AttributionEvent):
+    from packages.attribution import track_event
+    return await track_event(
+        event_type=req.event_type,
+        visitor_id=req.visitor_id,
+        session_id=req.session_id,
+        asset_id=req.asset_id,
+        asset_type=req.asset_type,
+        channel=req.channel,
+        utm_source=req.utm_source,
+        utm_medium=req.utm_medium,
+        utm_campaign=req.utm_campaign,
+        metadata=req.metadata,
+    )
+
+@app.get("/api/attribution/funnel")
+async def attribution_funnel(days: int = 30):
+    from packages.attribution import get_funnel
+    return await get_funnel(days)
+
+@app.get("/api/attribution/report")
+async def attribution_report(days: int = 30):
+    from packages.attribution import get_attribution_report
+    return await get_attribution_report(days)
 
 
 if __name__ == "__main__":
