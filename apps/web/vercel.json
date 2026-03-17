@@ -4,7 +4,7 @@
   "outputDirectory": ".next",
   "installCommand": "npm install",
   "env": {
-    "NEXT_PUBLIC_API_URL": "@api_url",
-    "PRIMARY_DOMAIN": "@primary_domain"
+    "NEXT_PUBLIC_API_URL": "https://web-production-c6ed5.up.railway.app",
+    "PRIMARY_DOMAIN": "dolarafuera.co"
   }
 }
