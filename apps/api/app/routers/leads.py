@@ -1,10 +1,10 @@
 """Lead capture, listing, lifecycle transitions, outcomes."""
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
-from pydantic import BaseModel, EmailStr
 from typing import Optional
 
-from packages.core import db, create_alert, get_logger
+from packages.core import db, create_alert, get_logger, SupabaseError
 from apps.api.app.middleware.auth import require_auth, audit
+from apps.api.app.schemas.leads import LeadCapture, LeadTransition, LeadOutcomeCreate
 
 logger = get_logger("router.leads")
 router = APIRouter()
@@ -20,40 +20,6 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
     "rejected":  ["closed"],
     "closed":    [],
 }
-
-
-class LeadCapture(BaseModel):
-    email: str
-    nombre: Optional[str] = None
-    telefono: Optional[str] = None
-    origen_url: Optional[str] = None
-    utm_source: Optional[str] = None
-    utm_medium: Optional[str] = None
-    utm_content: Optional[str] = None
-    tema_interes: Optional[str] = None
-    intent_score: int = 0
-    quiz_responses: dict = {}
-    mission_id: Optional[str] = None
-    site_id: Optional[str] = None
-    visitor_id: Optional[str] = None
-    session_id: Optional[str] = None
-    asset_id: Optional[str] = None
-    cta_variant: Optional[str] = None
-    calculator_data: Optional[dict] = None
-
-
-class LeadTransition(BaseModel):
-    to_status: str
-    reason: Optional[str] = None
-    triggered_by: str = "operator"
-
-
-class LeadOutcomeCreate(BaseModel):
-    status: str   # accepted | rejected
-    revenue_value: Optional[float] = None
-    partner: Optional[str] = None
-    reason: Optional[str] = None
-    source: str = "manual"
 
 
 @router.get("/api/leads")
@@ -110,25 +76,29 @@ async def capture_lead(lead: LeadCapture, bg: BackgroundTasks, request: Request)
     if lead.calculator_data:
         quiz["calculator"] = lead.calculator_data
 
-    result = await db.insert("leads", {
-        "mission_id": mission_id,
-        "site_id": site_id,
-        "email": lead.email,
-        "nombre": lead.nombre,
-        "telefono": lead.telefono,
-        "origen_url": lead.origen_url,
-        "utm_source": lead.utm_source,
-        "utm_medium": lead.utm_medium,
-        "utm_content": lead.utm_content,
-        "tema_interes": lead.tema_interes,
-        "intent_score": lead.intent_score,
-        "quiz_responses": quiz,
-        "visitor_id": lead.visitor_id,
-        "session_id": lead.session_id,
-        "asset_id": lead.asset_id,
-        "cta_variant": lead.cta_variant,
-        "current_status": "new",
-    })
+    try:
+        result = await db.insert("leads", {
+            "mission_id": mission_id,
+            "site_id": site_id,
+            "email": lead.email,
+            "nombre": lead.nombre,
+            "telefono": lead.telefono,
+            "origen_url": lead.origen_url,
+            "utm_source": lead.utm_source,
+            "utm_medium": lead.utm_medium,
+            "utm_content": lead.utm_content,
+            "tema_interes": lead.tema_interes,
+            "intent_score": lead.intent_score,
+            "quiz_responses": quiz,
+            "visitor_id": lead.visitor_id,
+            "session_id": lead.session_id,
+            "asset_id": lead.asset_id,
+            "cta_variant": lead.cta_variant,
+            "current_status": "new",
+        })
+    except SupabaseError as e:
+        logger.error(f"Lead capture DB error for {lead.email}: {e}")
+        raise HTTPException(500, {"error": "Database error", "detail": "Could not save lead. Please retry."})
 
     if result:
         await create_alert(

@@ -1,21 +1,13 @@
 """Goals, strategies, knowledge."""
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
-from pydantic import BaseModel
 from typing import Optional
 
 from packages.core import db, cost_tracker, get_logger
 from apps.api.app.middleware.auth import require_auth, audit
+from apps.api.app.schemas.strategy import GoalCreate
 
 logger = get_logger("router.strategy")
 router = APIRouter()
-
-
-class GoalCreate(BaseModel):
-    description: str
-    target_metric: str
-    target_value: float
-    mission_id: Optional[str] = None
-    site_id: Optional[str] = None
 
 
 @router.post("/api/goals")

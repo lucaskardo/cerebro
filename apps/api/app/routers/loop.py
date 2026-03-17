@@ -1,18 +1,13 @@
 """Loop router — manual trigger and cycle history."""
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
-from pydantic import BaseModel
 from typing import Optional
 
 from packages.core import db, config, get_logger
 from apps.api.app.middleware.auth import require_auth, audit
+from apps.api.app.schemas.loop import LoopRunRequest
 
 logger = get_logger("router.loop")
 router = APIRouter()
-
-
-class LoopRunRequest(BaseModel):
-    goal_id: str
-    dry_run: bool = False
 
 
 @router.post("/api/loop/run")

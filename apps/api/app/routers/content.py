@@ -2,27 +2,14 @@
 import base64
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
 from typing import Optional
 
 from packages.core import db, cost_tracker, get_logger
 from apps.api.app.middleware.auth import require_auth, audit
+from apps.api.app.schemas.content import ContentGenerate, ContentApprove
 
 logger = get_logger("router.content")
 router = APIRouter()
-
-
-class ContentGenerate(BaseModel):
-    mission_id: str
-    keyword: str
-    topic_type: str = "spoke"
-    cluster_id: Optional[str] = None
-    site_id: Optional[str] = None
-
-
-class ContentApprove(BaseModel):
-    action: str   # "approve" | "reject" | "edit"
-    notes: Optional[str] = None
 
 
 @router.post("/api/content/generate")

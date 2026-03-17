@@ -201,10 +201,151 @@ async def _handle_content_pipeline(payload: dict) -> dict:
 
 @register("daily_aggregation")
 async def _handle_daily_aggregation(payload: dict) -> dict:
-    """Aggregate fact tables for a given date."""
-    target_date = payload.get("date")
-    logger.info(f"Daily aggregation for {target_date} — stub (implement in Bloque 2.5)")
-    return {"date": target_date, "status": "stub"}
+    """
+    Aggregate fact tables for a given date.
+    Populates fact_daily_asset_performance and fact_daily_channel_performance
+    from touchpoints, leads, lead_outcomes.
+    """
+    from datetime import date as _date
+    target_date: str = payload.get("date") or _date.today().isoformat()
+    logger.info(f"Daily aggregation running for {target_date}")
+
+    # ── Asset performance ─────────────────────────────────────────────────────
+    # Pull touchpoints for the date (pageviews give visits per asset)
+    touches = await db.query("touchpoints", params={
+        "select": "site_id,asset_id,visitor_id,event_type",
+        "created_at": f"gte.{target_date}T00:00:00Z",
+        "created_at2": f"lt.{target_date}T23:59:59Z",
+    })
+    # Actually use proper date filter
+    touches = await db.query("touchpoints", params={
+        "select": "site_id,asset_id,visitor_id,event_type",
+        "created_at": f"gte.{target_date}",
+    })
+
+    # Leads for the date grouped by asset_id
+    leads_raw = await db.query("leads", params={
+        "select": "id,site_id,asset_id,current_status",
+        "created_at": f"gte.{target_date}T00:00:00Z",
+    })
+
+    # Lead outcomes (revenue)
+    outcomes = await db.query("lead_outcomes", params={
+        "select": "lead_id,site_id,revenue_value,status",
+        "created_at": f"gte.{target_date}T00:00:00Z",
+    })
+    revenue_by_lead = {o["lead_id"]: float(o.get("revenue_value") or 0) for o in outcomes}
+
+    # Build asset aggregates
+    asset_agg: dict[tuple, dict] = {}
+    for t in touches:
+        sid = t.get("site_id") or ""
+        aid = t.get("asset_id") or ""
+        if not aid:
+            continue
+        key = (sid, aid)
+        if key not in asset_agg:
+            asset_agg[key] = {"visits": 0, "unique_visitors": set(), "cta_clicks": 0}
+        asset_agg[key]["visits"] += 1
+        if t.get("visitor_id"):
+            asset_agg[key]["unique_visitors"].add(t["visitor_id"])
+        if t.get("event_type") == "click":
+            asset_agg[key]["cta_clicks"] += 1
+
+    lead_agg: dict[tuple, dict] = {}
+    for lead in leads_raw:
+        sid = lead.get("site_id") or ""
+        aid = lead.get("asset_id") or ""
+        if not aid:
+            continue
+        key = (sid, aid)
+        if key not in lead_agg:
+            lead_agg[key] = {"leads": 0, "qualified_leads": 0, "revenue": 0.0}
+        lead_agg[key]["leads"] += 1
+        if lead.get("current_status") in ("qualified", "delivered", "accepted"):
+            lead_agg[key]["qualified_leads"] += 1
+        lead_agg[key]["revenue"] += revenue_by_lead.get(lead["id"], 0.0)
+
+    all_asset_keys = set(asset_agg.keys()) | set(lead_agg.keys())
+    asset_rows_upserted = 0
+    for (sid, aid) in all_asset_keys:
+        a = asset_agg.get((sid, aid), {})
+        l = lead_agg.get((sid, aid), {})
+        existing = await db.query("fact_daily_asset_performance", params={
+            "select": "id",
+            "site_id": f"eq.{sid}",
+            "asset_id": f"eq.{aid}",
+            "date": f"eq.{target_date}",
+            "limit": "1",
+        })
+        row = {
+            "site_id": sid or None,
+            "asset_id": aid,
+            "date": target_date,
+            "visits": a.get("visits", 0),
+            "unique_visitors": len(a.get("unique_visitors", set())),
+            "leads": l.get("leads", 0),
+            "qualified_leads": l.get("qualified_leads", 0),
+            "revenue": l.get("revenue", 0.0),
+            "cta_clicks": a.get("cta_clicks", 0),
+        }
+        if existing:
+            await db.update("fact_daily_asset_performance", existing[0]["id"], row)
+        else:
+            await db.insert("fact_daily_asset_performance", row)
+        asset_rows_upserted += 1
+
+    # ── Channel performance ───────────────────────────────────────────────────
+    channel_agg: dict[tuple, dict] = {}
+    for t in touches:
+        sid = t.get("site_id") or ""
+        channel = t.get("channel") or "unknown"
+        key = (sid, channel)
+        if key not in channel_agg:
+            channel_agg[key] = {"visits": 0, "leads": 0, "qualified_leads": 0, "revenue": 0.0}
+        channel_agg[key]["visits"] += 1
+
+    for lead in leads_raw:
+        sid = lead.get("site_id") or ""
+        channel = lead.get("utm_source") or "direct"
+        key = (sid, channel)
+        if key not in channel_agg:
+            channel_agg[key] = {"visits": 0, "leads": 0, "qualified_leads": 0, "revenue": 0.0}
+        channel_agg[key]["leads"] += 1
+        if lead.get("current_status") in ("qualified", "delivered", "accepted"):
+            channel_agg[key]["qualified_leads"] += 1
+        channel_agg[key]["revenue"] += revenue_by_lead.get(lead["id"], 0.0)
+
+    channel_rows_upserted = 0
+    for (sid, channel) in channel_agg.items():
+        pass  # loop var name collision — fix below
+
+    channel_rows_upserted = 0
+    for (sid, channel), vals in channel_agg.items():
+        existing = await db.query("fact_daily_channel_performance", params={
+            "select": "id",
+            "site_id": f"eq.{sid}",
+            "channel": f"eq.{channel}",
+            "date": f"eq.{target_date}",
+            "limit": "1",
+        })
+        row = {
+            "site_id": sid or None,
+            "channel": channel,
+            "date": target_date,
+            "visits": vals.get("visits", 0),
+            "leads": vals.get("leads", 0),
+            "qualified_leads": vals.get("qualified_leads", 0),
+            "revenue": vals.get("revenue", 0.0),
+        }
+        if existing:
+            await db.update("fact_daily_channel_performance", existing[0]["id"], row)
+        else:
+            await db.insert("fact_daily_channel_performance", row)
+        channel_rows_upserted += 1
+
+    logger.info(f"Daily aggregation complete: date={target_date} asset_rows={asset_rows_upserted} channel_rows={channel_rows_upserted}")
+    return {"date": target_date, "asset_rows": asset_rows_upserted, "channel_rows": channel_rows_upserted}
 
 
 @register("partner_delivery")

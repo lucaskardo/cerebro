@@ -11,6 +11,15 @@ import httpx
 # ============================================
 # CONFIG
 # ============================================
+class SupabaseError(Exception):
+    """Raised when Supabase returns a 4xx/5xx response."""
+    pass
+
+class SupabaseTimeout(Exception):
+    """Raised when a Supabase request times out."""
+    pass
+
+
 class Config:
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
@@ -91,17 +100,22 @@ class SupabaseClient:
                     raise ValueError(f"Unsupported method: {method}")
                 
                 if resp.status_code >= 400:
-                    self.logger.error(f"Supabase {method} {table}: {resp.status_code} {resp.text[:200]}")
-                    return []
-                
+                    msg = f"Supabase {method} {table}: HTTP {resp.status_code} — {resp.text[:200]}"
+                    self.logger.error(msg)
+                    raise SupabaseError(msg)
+
                 return resp.json() if resp.text else []
-                
+
             except httpx.TimeoutException:
-                self.logger.error(f"Supabase timeout: {method} {table}")
-                return []
+                msg = f"Supabase timeout: {method} {table}"
+                self.logger.error(msg)
+                raise SupabaseTimeout(msg)
+            except (SupabaseError, SupabaseTimeout):
+                raise
             except Exception as e:
-                self.logger.error(f"Supabase error: {e}")
-                return []
+                msg = f"Supabase unexpected error on {method} {table}: {e}"
+                self.logger.error(msg)
+                raise SupabaseError(msg) from e
     
     async def get(self, table: str, **filters) -> list:
         """Simple GET with filters. Usage: db.get("missions", status="eq.active")"""

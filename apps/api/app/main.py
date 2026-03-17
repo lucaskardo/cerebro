@@ -17,6 +17,7 @@ load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 from packages.core import config, get_logger
 from apps.api.app.middleware.logging_mw import RequestLoggingMiddleware
+from apps.api.app.middleware.auth import AuthMiddleware
 
 logger = get_logger("api")
 
@@ -63,6 +64,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── Auth (enforces X-API-Key on all non-public routes) ─────────────────────
+app.add_middleware(AuthMiddleware)
 
 # ─── Request logging (injects request_id) ────────────────────────────────────
 app.add_middleware(RequestLoggingMiddleware)

@@ -239,30 +239,4 @@ async def update_flag(fid: str, body: dict, request: Request, _auth=Depends(requ
     return item
 
 
-# ─── Approvals ───────────────────────────────────────────────────────────────
-
-@router.get("/api/approvals")
-async def list_approvals(status: Optional[str] = "pending", site_id: Optional[str] = None):
-    params = {"select": "*", "order": "created_at.desc", "limit": "50"}
-    if status:
-        params["status"] = f"eq.{status}"
-    if site_id:
-        params["site_id"] = f"eq.{site_id}"
-    return await db.query("approvals", params=params)
-
-
-@router.post("/api/approvals/{aid}/resolve")
-async def resolve_approval(aid: str, body: dict, request: Request, _auth=Depends(require_auth)):
-    action = body.get("action")  # "approved" | "rejected"
-    if action not in ("approved", "rejected"):
-        raise HTTPException(400, "action must be 'approved' or 'rejected'")
-    from datetime import datetime
-    item = await db.update("approvals", aid, {
-        "status": action,
-        "notes": body.get("notes"),
-        "resolved_at": datetime.now(timezone.utc).isoformat(),
-    })
-    if not item:
-        raise HTTPException(404, "Approval not found")
-    await audit(request, f"approval_{action}", "approvals", aid, body)
-    return item
+# Approvals endpoints live in execution.py (canonical location)
