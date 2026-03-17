@@ -216,6 +216,75 @@ export interface SocialQueueItem {
   content_assets?: { title: string; slug: string };
 }
 
+export interface Opportunity {
+  id: string;
+  site_id: string | null;
+  goal_id: string | null;
+  query: string | null;
+  pain_point: string | null;
+  audience: string | null;
+  channel: string;
+  intent: string;
+  expected_value: number;
+  confidence: "low" | "medium" | "high";
+  execution_status: "detected" | "evaluated" | "planned" | "executing" | "measured";
+  status: string;
+  created_at: string;
+}
+
+export interface Experiment {
+  id: string;
+  site_id: string | null;
+  opportunity_id: string | null;
+  hypothesis: string;
+  target_metric: string | null;
+  variant_a_json: Record<string, unknown>;
+  variant_b_json: Record<string, unknown>;
+  run_window_days: number;
+  status: "planned" | "running" | "evaluated" | "winner_declared" | "archived";
+  outcome_json: Record<string, unknown>;
+  winner: string | null;
+  learnings: string | null;
+  visits_a: number;
+  visits_b: number;
+  metric_baseline: number | null;
+  metric_variant: number | null;
+  created_at: string;
+  evaluated_at: string | null;
+}
+
+export interface Task {
+  id: string;
+  experiment_id: string | null;
+  site_id: string | null;
+  skill_name: string;
+  input_json: Record<string, unknown>;
+  depends_on: string | null;
+  status: "pending" | "running" | "completed" | "failed" | "retrying" | "dead_lettered";
+  output_json: Record<string, unknown>;
+  error: string | null;
+  attempts: number;
+  estimated_cost: number;
+  actual_cost: number | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface Approval {
+  id: string;
+  site_id: string | null;
+  entity_type: string;
+  entity_id: string | null;
+  action: string;
+  requested_by: string;
+  approved_by: string | null;
+  status: "pending" | "approved" | "rejected" | "executed" | "expired";
+  notes: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
 export const api = {
   status: () => fetchAPI<Status>("/api/status"),
   budget: () => fetchAPI<Budget>("/api/budget"),
@@ -256,6 +325,33 @@ export const api = {
       if (!r.ok) throw new Error(`Reveal failed: ${r.status}`);
       return r.json() as Promise<PersonaIdentity[]>;
     }),
+  opportunities: (params?: { goal_id?: string; site_id?: string; execution_status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.goal_id) q.set("goal_id", params.goal_id);
+    if (params?.site_id) q.set("site_id", params.site_id);
+    if (params?.execution_status) q.set("execution_status", params.execution_status);
+    return fetchAPI<Opportunity[]>(`/api/opportunities${q.toString() ? `?${q}` : ""}`);
+  },
+  experiments: (params?: { site_id?: string; status?: string; opportunity_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.site_id) q.set("site_id", params.site_id);
+    if (params?.status) q.set("status", params.status);
+    if (params?.opportunity_id) q.set("opportunity_id", params.opportunity_id);
+    return fetchAPI<Experiment[]>(`/api/experiments${q.toString() ? `?${q}` : ""}`);
+  },
+  tasks: (params?: { site_id?: string; experiment_id?: string; status?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.site_id) q.set("site_id", params.site_id);
+    if (params?.experiment_id) q.set("experiment_id", params.experiment_id);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    return fetchAPI<Task[]>(`/api/tasks${q.toString() ? `?${q}` : ""}`);
+  },
+  approvals: (status = "pending", site_id?: string) => {
+    const q = new URLSearchParams({ status });
+    if (site_id) q.set("site_id", site_id);
+    return fetchAPI<Approval[]>(`/api/approvals?${q}`);
+  },
   socialQueue: (params?: { persona_id?: string; platform?: string; status?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.persona_id) q.set("persona_id", params.persona_id);

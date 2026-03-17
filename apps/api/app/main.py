@@ -80,7 +80,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
-from apps.api.app.routers import system, content, leads, strategy, personas, attribution
+from apps.api.app.routers import system, content, leads, strategy, personas, attribution, execution
 
 app.include_router(system.router)
 app.include_router(content.router)
@@ -88,6 +88,7 @@ app.include_router(leads.router)
 app.include_router(strategy.router)
 app.include_router(personas.router)
 app.include_router(attribution.router)
+app.include_router(execution.router)
 
 
 if __name__ == "__main__":

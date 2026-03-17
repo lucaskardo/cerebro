@@ -58,6 +58,7 @@ export default async function RootLayout({
             </Link>
             <Link href="/goals" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Goals</Link>
             <Link href="/strategies" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Estrategias</Link>
+            <Link href="/execution" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Engine</Link>
             <Link href="/attribution" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Atribución</Link>
             <Link href="/personas" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Personas</Link>
             <div className="ml-auto flex items-center gap-3">

@@ -1,40 +1,90 @@
 """
 CEREBRO — Skill System
-Skills are modular capabilities the system can use.
-Each skill does one thing well. New skills can be added easily.
+Skills are modular capabilities with typed contracts.
+Each skill declares: approval_policy, retry_policy, validate_input, estimate, execute.
 """
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Optional
 from packages.core import db, get_logger
 
 
 class Skill(ABC):
-    """Base class for all skills."""
+    """Base class for all skills with typed contracts."""
 
     name: str = "unnamed"
     description: str = ""
-    channel: str = "general"  # seo, social, community, messaging, outreach
+    channel: str = "general"  # seo, social, community, messaging, outreach, conversion, email
+
+    # Policy declarations
+    approval_policy: str = "auto_run"          # "auto_run" | "requires_approval"
+    retry_policy: dict = {"max_attempts": 3, "backoff_seconds": 60}
 
     def __init__(self):
         self.logger = get_logger(f"skill.{self.name}")
 
     @abstractmethod
     async def execute(self, params: dict) -> dict:
-        """Run the skill with given parameters. Returns result dict."""
+        """Run the skill. Returns {output, metrics}."""
         pass
 
-    async def estimate(self, params: dict) -> dict:
-        """Estimate the outcome without executing. For simulation."""
-        return {"estimated": True, "confidence": 0.5, "notes": "No simulation available for this skill"}
-
-    async def validate_params(self, params: dict) -> tuple[bool, str]:
-        """Check if params are valid before execution."""
+    async def validate_input(self, params: dict) -> tuple[bool, str]:
+        """Check params before execution. Returns (ok, error_message)."""
         return True, "ok"
 
+    # Backward-compat alias
+    async def validate_params(self, params: dict) -> tuple[bool, str]:
+        return await self.validate_input(params)
 
-# ============================================
-# SKILL REGISTRY
-# ============================================
+    async def estimate(self, params: dict) -> dict:
+        """Estimate outcome without executing. Returns {cost, time_hours, confidence}."""
+        return {"estimated": True, "confidence": 0.5, "cost": 0.0, "time_hours": 1.0}
+
+    async def run_with_tracking(
+        self,
+        params: dict,
+        task_id: Optional[str] = None,
+        site_id: Optional[str] = None,
+    ) -> dict:
+        """Execute with full skill_runs history logging."""
+        run = None
+        try:
+            run = await db.insert("skill_runs", {
+                "task_id": task_id,
+                "site_id": site_id,
+                "skill_name": self.name,
+                "status": "running",
+                "input_json": params,
+            })
+        except Exception as e:
+            self.logger.warning(f"skill_runs insert failed: {e}")
+
+        run_id = run["id"] if run else None
+
+        try:
+            result = await self.execute(params)
+            if run_id:
+                await db.update("skill_runs", run_id, {
+                    "status": "completed",
+                    "output_json": result,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                })
+            return result
+        except Exception as e:
+            if run_id:
+                try:
+                    await db.update("skill_runs", run_id, {
+                        "status": "failed",
+                        "error": str(e)[:500],
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                except Exception:
+                    pass
+            raise
+
+
+# ─── Registry ─────────────────────────────────────────────────────────────────
+
 _registry: dict[str, Skill] = {}
 
 
@@ -48,43 +98,78 @@ def get_skill(name: str) -> Optional[Skill]:
 
 
 def list_skills() -> list[dict]:
-    return [{"name": s.name, "description": s.description, "channel": s.channel} for s in _registry.values()]
+    return [
+        {
+            "name": s.name,
+            "description": s.description,
+            "channel": s.channel,
+            "approval_policy": s.approval_policy,
+            "retry_policy": s.retry_policy,
+        }
+        for s in _registry.values()
+    ]
 
 
-# ============================================
-# BUILT-IN SKILLS
-# ============================================
+# ─── Built-in Skills ──────────────────────────────────────────────────────────
 
 class ContentCreationSkill(Skill):
     name = "content_creation"
     description = "Generate SEO-optimized articles from keywords"
     channel = "seo"
+    approval_policy = "auto_run"
+    retry_policy = {"max_attempts": 2, "backoff_seconds": 120}
+
+    async def validate_input(self, params: dict) -> tuple[bool, str]:
+        if not params.get("keyword"):
+            return False, "keyword is required"
+        if not params.get("mission_id"):
+            return False, "mission_id is required"
+        return True, "ok"
+
+    async def estimate(self, params: dict) -> dict:
+        return {
+            "estimated": True, "confidence": 0.7,
+            "estimated_traffic_monthly": 100, "time_to_rank_weeks": 8,
+            "cost": 0.15, "time_hours": 0.1,
+        }
 
     async def execute(self, params: dict) -> dict:
         from packages.content.pipeline import run_pipeline
-        keyword = params["keyword"]
-        mission_id = params["mission_id"]
-        asset = await run_pipeline(keyword, mission_id)
-        return {"asset_id": asset["id"], "title": asset["title"], "status": asset["status"], "quality": asset.get("quality_score")}
-
-    async def estimate(self, params: dict) -> dict:
-        return {"estimated": True, "confidence": 0.7, "estimated_traffic_monthly": 100, "time_to_rank_weeks": 8, "cost_usd": 0.15}
+        asset = await run_pipeline(
+            params["keyword"],
+            params["mission_id"],
+            site_id=params.get("site_id"),
+        )
+        return {
+            "asset_id": asset["id"],
+            "title": asset["title"],
+            "status": asset["status"],
+            "quality": asset.get("quality_score"),
+        }
 
 
 class LeadCaptureSkill(Skill):
     name = "lead_capture"
     description = "Capture and qualify leads through forms and quizzes"
     channel = "conversion"
+    approval_policy = "auto_run"
+
+    async def validate_input(self, params: dict) -> tuple[bool, str]:
+        if not params.get("email"):
+            return False, "email is required"
+        return True, "ok"
 
     async def execute(self, params: dict) -> dict:
         lead = await db.insert("leads", {
             "mission_id": params.get("mission_id"),
+            "site_id": params.get("site_id"),
             "email": params["email"],
             "nombre": params.get("nombre"),
             "intent_score": params.get("intent_score", 0),
             "tema_interes": params.get("tema_interes"),
             "origen_url": params.get("origen_url"),
             "utm_source": params.get("utm_source"),
+            "current_status": "new",
         })
         return {"lead_id": lead["id"] if lead else None, "captured": bool(lead)}
 
@@ -93,10 +178,18 @@ class EmailNurturingSkill(Skill):
     name = "email_nurturing"
     description = "Send nurturing email sequences to leads"
     channel = "email"
+    approval_policy = "requires_approval"   # outbound email requires approval
+
+    async def validate_input(self, params: dict) -> tuple[bool, str]:
+        if not params.get("email"):
+            return False, "email is required"
+        return True, "ok"
 
     async def execute(self, params: dict) -> dict:
         from packages.email import send_welcome_email
-        sent = await send_welcome_email(params["email"], params.get("nombre"), params.get("tema"))
+        sent = await send_welcome_email(
+            params["email"], params.get("nombre"), params.get("tema")
+        )
         return {"sent": sent}
 
 
@@ -104,6 +197,7 @@ class CommunityEngagementSkill(Skill):
     name = "community_engagement"
     description = "Draft responses for Reddit, forums, Facebook groups (human-approved)"
     channel = "community"
+    approval_policy = "requires_approval"   # always human-approved
 
     async def execute(self, params: dict) -> dict:
         from packages.ai import complete
@@ -118,16 +212,16 @@ Rules:
 - Use natural language, like a real person
 - Only mention our product if directly relevant
 - Keep it concise (2-3 paragraphs max)""",
-            system="You are Carlos Medina, a financial specialist for Colombians. You help in online communities with genuine advice.",
+            system="You are a financial specialist for Colombians. You help in online communities with genuine advice.",
             model="haiku",
             pipeline_step="community_draft",
         )
-        # Save as draft for human approval
         await db.insert("social_content_queue", {
             "platform": params.get("platform", "reddit"),
             "content_type": "comment",
             "content_text": result["text"],
-            "status": "draft",  # ALWAYS requires human approval
+            "site_id": params.get("site_id"),
+            "status": "draft",
         })
         return {"draft": result["text"], "status": "awaiting_approval"}
 
@@ -136,6 +230,7 @@ class SocialDistributionSkill(Skill):
     name = "social_distribution"
     description = "Adapt content for Instagram, TikTok, X, LinkedIn"
     channel = "social"
+    approval_policy = "requires_approval"   # social posting always requires approval
 
     async def execute(self, params: dict) -> dict:
         from packages.ai import complete
@@ -152,9 +247,9 @@ class SocialDistributionSkill(Skill):
             json_mode=True,
             pipeline_step=f"social_{platform}",
         )
-        # Save as draft
         await db.insert("social_content_queue", {
             "content_asset_id": params.get("asset_id"),
+            "site_id": params.get("site_id"),
             "platform": platform,
             "content_type": "post",
             "content_text": result["text"],
@@ -164,5 +259,8 @@ class SocialDistributionSkill(Skill):
 
 
 # Register all built-in skills
-for _skill_cls in [ContentCreationSkill, LeadCaptureSkill, EmailNurturingSkill, CommunityEngagementSkill, SocialDistributionSkill]:
+for _skill_cls in [
+    ContentCreationSkill, LeadCaptureSkill, EmailNurturingSkill,
+    CommunityEngagementSkill, SocialDistributionSkill,
+]:
     register_skill(_skill_cls())
