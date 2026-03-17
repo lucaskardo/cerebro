@@ -3,10 +3,12 @@ CEREBRO v7 — FastAPI Backend
 """
 import os
 import sys
+import base64
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date
@@ -206,6 +208,27 @@ async def get_content(aid: str):
     if not a:
         raise HTTPException(404, "Content not found")
     return a
+
+@app.get("/api/content/{aid}/image")
+async def get_content_image(aid: str, style: str = "financial"):
+    """Generate (or return cached) hero image for a content asset."""
+    a = await db.get_by_id("content_assets", aid)
+    if not a:
+        raise HTTPException(404, "Content not found")
+
+    from packages.images import generate_hero_image
+    result = await generate_hero_image(
+        keyword=a.get("keyword", ""),
+        title=a.get("title", ""),
+        asset_id=aid,
+        style=style,
+    )
+
+    if result["type"] == "svg":
+        return Response(content=result["data"], media_type="image/svg+xml")
+
+    # Gemini / base64 JPEG
+    return Response(content=base64.b64decode(result["data"]), media_type="image/jpeg")
 
 @app.post("/api/content/{aid}/review")
 async def review_content(aid: str, action: ContentApprove):
