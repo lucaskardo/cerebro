@@ -54,6 +54,7 @@ class ContentGenerate(BaseModel):
     keyword: str
     topic_type: str = "spoke"
     cluster_id: Optional[str] = None
+    site_id: Optional[str] = None
 
 class ContentApprove(BaseModel):
     action: str  # "approve" | "reject" | "edit"
@@ -159,17 +160,18 @@ async def generate_content(req: ContentGenerate, bg: BackgroundTasks):
         "slug": _slugify(req.keyword),
         "keyword": req.keyword,
         "status": "generating",
+        "site_id": req.site_id,
     })
-    
-    bg.add_task(_run_pipeline_bg, req.keyword, req.mission_id, asset["id"])
+
+    bg.add_task(_run_pipeline_bg, req.keyword, req.mission_id, asset["id"], req.site_id)
     
     return {"asset_id": asset["id"], "status": "generating", "keyword": req.keyword}
 
 
-async def _run_pipeline_bg(keyword: str, mission_id: str, asset_id: str):
+async def _run_pipeline_bg(keyword: str, mission_id: str, asset_id: str, site_id: str = None):
     from packages.content.pipeline import run_pipeline
     try:
-        await run_pipeline(keyword, mission_id, asset_id)
+        await run_pipeline(keyword, mission_id, asset_id, site_id=site_id)
     except Exception as e:
         logger.error(f"Background pipeline failed: {e}")
 
@@ -438,6 +440,21 @@ async def attribution_funnel(days: int = 30):
 async def attribution_report(days: int = 30):
     from packages.attribution import get_attribution_report
     return await get_attribution_report(days)
+
+
+# ============================================
+# SITES (multi-brand)
+# ============================================
+@app.get("/api/sites")
+async def list_sites():
+    return await db.query("domain_sites", params={"select": "*", "status": "eq.active", "order": "created_at.asc"})
+
+@app.get("/api/sites/{sid}")
+async def get_site(sid: str):
+    s = await db.get_by_id("domain_sites", sid)
+    if not s:
+        raise HTTPException(404, "Site not found")
+    return s
 
 
 if __name__ == "__main__":

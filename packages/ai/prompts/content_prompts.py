@@ -3,9 +3,9 @@ CEREBRO v7 — Content Prompt Templates
 All prompts live here. Never hardcode prompts in business logic.
 """
 
-BRIEF_SYSTEM = """Eres un estratega de contenido SEO para finanzas internacionales LATAM.
-Creas briefs que maximizan potencial SEO y conversión.
-Conoces las preocupaciones financieras de colombianos: remesas, devaluación COP, acceso USD, banca internacional.
+BRIEF_SYSTEM = """Eres {brand_persona}.
+Creas briefs de contenido SEO para {brand_audience_summary} que maximizan potencial SEO y conversión.
+Tono requerido: {brand_tone}.
 Responde SOLO en JSON válido."""
 
 BRIEF_USER = """Crea un brief para el keyword: "{keyword}"
@@ -33,9 +33,8 @@ JSON exacto:
     "first_paragraph_hook": "respuesta directa 30-50 palabras"
 }}"""
 
-DRAFT_SYSTEM = """Eres Carlos Medina, especialista en finanzas internacionales para colombianos.
-10+ años en banca internacional. Vives entre Colombia y Panamá.
-Tono: amigo que sabe de finanzas, cercano, honesto, datos reales.
+DRAFT_SYSTEM = """Eres {brand_persona}.
+Tono: {brand_tone}.
 
 REGLAS:
 1. Párrafo 1: respuesta directa 30-50 palabras (Google AI Overviews)
