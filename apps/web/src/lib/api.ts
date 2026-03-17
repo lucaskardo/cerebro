@@ -71,6 +71,19 @@ export interface ArticleFull extends ContentAsset {
   updated_at: string;
 }
 
+export interface Site {
+  id: string;
+  domain: string;
+  brand_name: string | null;
+  brand_persona: string | null;
+  brand_tone: string | null;
+  brand_audience: Record<string, unknown> | null;
+  brand_topics: string[] | null;
+  brand_cta: Record<string, unknown> | null;
+  status: string;
+  site_type: string;
+}
+
 export interface Goal {
   id: string;
   description: string;
@@ -119,6 +132,7 @@ export const api = {
   goals: () => fetchAPI<Goal[]>("/api/goals"),
   strategies: (goalId?: string) => fetchAPI<Strategy[]>(`/api/strategies${goalId ? `?goal_id=${goalId}` : ""}`),
   funnel: (days = 30) => fetchAPI<Funnel>(`/api/attribution/funnel?days=${days}`),
+  sites: () => fetchAPI<Site[]>("/api/sites"),
   relatedContent: (limit = 5) => fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
 };
 

@@ -3,17 +3,26 @@ import "./globals.css";
 import Link from "next/link";
 import { Suspense } from "react";
 import AttributionTracker from "@/components/AttributionTracker";
+import BrandSelector from "@/components/BrandSelector";
+import { api } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "CEREBRO v7 — Dashboard",
   description: "Sistema autónomo de tráfico y leads — ikigii Colombia",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  let sites: Awaited<ReturnType<typeof api.sites>> = [];
+  try {
+    sites = await api.sites();
+  } catch {
+    sites = [];
+  }
+
   return (
     <html lang="es">
       <body className="min-h-screen bg-slate-900 text-slate-100">
@@ -50,7 +59,11 @@ export default function RootLayout({
             <Link href="/goals" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Goals</Link>
             <Link href="/strategies" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Estrategias</Link>
             <Link href="/attribution" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Atribución</Link>
-            <div className="ml-auto text-xs text-slate-600">dolarafuera.co</div>
+            <div className="ml-auto flex items-center gap-3">
+              <Suspense fallback={null}>
+                <BrandSelector sites={sites} />
+              </Suspense>
+            </div>
           </div>
         </nav>
         <main className="max-w-7xl mx-auto px-4 py-8">{children}</main>

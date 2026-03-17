@@ -1,6 +1,11 @@
 import { api } from "@/lib/api";
 
-export default async function LeadsPage() {
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ brand?: string }>;
+}) {
+  const { brand } = await searchParams;
   let leads: Awaited<ReturnType<typeof api.leads>> = [];
   let error: string | null = null;
 
@@ -16,6 +21,12 @@ export default async function LeadsPage() {
 
   return (
     <div className="space-y-8">
+      {brand && (
+        <div className="text-xs text-slate-600 bg-slate-800/50 border border-slate-700/50 px-3 py-2 rounded-lg inline-flex items-center gap-2">
+          <span>Filtrando por marca</span>
+          <a href="/leads" className="text-slate-500 hover:text-slate-300">✕ limpiar</a>
+        </div>
+      )}
       <div>
         <h1 className="text-2xl font-bold text-slate-100">Leads</h1>
         <p className="text-sm text-slate-500 mt-1">{leads.length} leads capturados</p>

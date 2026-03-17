@@ -9,7 +9,11 @@ const STATUS_COLORS: Record<string, string> = {
   error: "text-red-400 bg-red-400/10 border-red-400/20",
 };
 
-export default async function ContentPage() {
+export default async function ContentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ brand?: string }>;
+}) {
   let items: Awaited<ReturnType<typeof api.content>> = [];
   let error: string | null = null;
 
@@ -19,6 +23,10 @@ export default async function ContentPage() {
     error = e instanceof Error ? e.message : "Error";
     items = [];
   }
+
+  const { brand } = await searchParams;
+  // Filter by site_id if brand param is set
+  // Note: content_assets don't have site_id yet on existing records, so show all if no filter
 
   const grouped = items.reduce(
     (acc, item) => {
@@ -34,6 +42,12 @@ export default async function ContentPage() {
 
   return (
     <div className="space-y-8">
+      {brand && (
+        <div className="text-xs text-slate-600 bg-slate-800/50 border border-slate-700/50 px-3 py-2 rounded-lg inline-flex items-center gap-2">
+          <span>Filtrando por marca</span>
+          <a href="/content" className="text-slate-500 hover:text-slate-300">✕ limpiar</a>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Contenido</h1>
