@@ -134,6 +134,8 @@ export const api = {
   funnel: (days = 30) => fetchAPI<Funnel>(`/api/attribution/funnel?days=${days}`),
   sites: () => fetchAPI<Site[]>("/api/sites"),
   relatedContent: (limit = 5) => fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
+  contentBySite: (siteId: string, limit = 20) =>
+    fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
 };
 
 export async function approveStrategy(id: string): Promise<Strategy> {

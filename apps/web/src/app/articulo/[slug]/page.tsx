@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import EmailCaptureForm from "@/components/EmailCaptureForm";
 
 const SITE_URL = `https://${process.env.PRIMARY_DOMAIN || "dolarafuera.co"}`;
+// TODO: When content_assets.site_id is populated, fetch site's brand_persona as author
 const AUTHOR = "Carlos Medina";
 
 // ─── Metadata (SEO) ─────────────────────────────────────────────────────────
