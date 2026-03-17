@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
+import { Suspense } from "react";
+import AttributionTracker from "@/components/AttributionTracker";
 
 export const metadata: Metadata = {
   title: "CEREBRO v7 — Dashboard",
@@ -15,6 +17,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="min-h-screen bg-slate-900 text-slate-100">
+        <Suspense fallback={null}><AttributionTracker /></Suspense>
         <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-6">
             <Link href="/" className="font-bold text-green-400 tracking-wider text-sm">
@@ -44,6 +47,9 @@ export default function RootLayout({
             >
               Calculadora
             </Link>
+            <Link href="/goals" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Goals</Link>
+            <Link href="/strategies" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Estrategias</Link>
+            <Link href="/attribution" className="text-sm text-slate-400 hover:text-slate-100 transition-colors">Atribución</Link>
             <div className="ml-auto text-xs text-slate-600">dolarafuera.co</div>
           </div>
         </nav>
