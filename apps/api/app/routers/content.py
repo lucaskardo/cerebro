@@ -58,6 +58,15 @@ async def _run_pipeline_bg(keyword: str, mission_id: str, asset_id: str, site_id
         logger.error(f"Background pipeline failed: {e}")
 
 
+async def _generate_social_drafts_bg(asset_id: str, site_id: str):
+    from packages.skills.social_adapter import generate_social_drafts
+    try:
+        result = await generate_social_drafts(asset_id, site_id)
+        logger.info(f"Social drafts generated: {result}")
+    except Exception as e:
+        logger.error(f"Social draft generation failed for {asset_id}: {e}")
+
+
 @router.get("/api/content")
 async def list_content(status: Optional[str] = None, limit: int = 50,
                        site_id: Optional[str] = None):
@@ -113,7 +122,7 @@ async def get_content_image(aid: str, style: str = "financial"):
 
 
 @router.post("/api/content/{aid}/review")
-async def review_content(aid: str, action: ContentApprove,
+async def review_content(aid: str, action: ContentApprove, bg: BackgroundTasks,
                           request: Request, _auth=Depends(require_auth)):
     a = await db.get_by_id("content_assets", aid)
     if not a:
@@ -134,6 +143,10 @@ async def review_content(aid: str, action: ContentApprove,
 
         await db.update("content_assets", aid, {"status": "approved"})
         logger.info(f"Content approved: {a['title']}")
+
+        # Trigger social draft generation in background
+        if a.get("site_id"):
+            bg.add_task(_generate_social_drafts_bg, aid, a["site_id"])
 
     elif action.action == "reject":
         await db.update("content_assets", aid, {"status": "draft"})

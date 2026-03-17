@@ -188,7 +188,39 @@ async def transition_lead(lid: str, body: LeadTransition,
     })
     await audit(request, "lead_transition", "leads", lid,
                 {"from": from_status, "to": to_status, "reason": body.reason})
+
+    # Trigger partner delivery when a lead becomes qualified
+    if to_status == "qualified" and lead.get("site_id"):
+        await _enqueue_partner_deliveries(lid, lead["site_id"])
+
     return {"status": "ok", "from": from_status, "to": to_status}
+
+
+async def _enqueue_partner_deliveries(lead_id: str, site_id: str):
+    """Enqueue one delivery job per active webhook for the site."""
+    from packages.jobs import enqueue
+    try:
+        webhooks = await db.query("partner_webhooks", params={
+            "select": "id,url,secret",
+            "site_id": f"eq.{site_id}",
+            "active": "eq.true",
+        })
+        for wh in webhooks:
+            await enqueue(
+                type="partner_delivery",
+                payload={
+                    "lead_id": lead_id,
+                    "site_id": site_id,
+                    "webhook_id": wh["id"],
+                    "webhook_url": wh["url"],
+                    "webhook_secret": wh.get("secret", ""),
+                },
+                site_id=site_id,
+                idempotency_key=f"partner_delivery:{lead_id}:{wh['id']}",
+            )
+        logger.info(f"Partner delivery jobs enqueued: lead={lead_id} webhooks={len(webhooks)}")
+    except Exception as e:
+        logger.error(f"Failed to enqueue partner deliveries for lead {lead_id}: {e}")
 
 
 @router.get("/api/leads/{lid}/outcome")

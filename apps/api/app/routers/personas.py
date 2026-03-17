@@ -119,6 +119,18 @@ async def create_persona(req: PersonaCreate, request: Request, _auth=Depends(req
             "status": "pending_setup",
         })
 
+    # Auto-generate one account_setup approval per platform
+    for plat in DEFAULT_PLATFORMS:
+        await db.insert("approvals", {
+            "site_id": req.site_id,
+            "entity_type": "account_setup",
+            "entity_id": persona["id"],
+            "action": f"setup_{plat}_account",
+            "requested_by": "system",
+            "status": "pending",
+            "notes": f"Configurar cuenta {plat} para {req.name}",
+        })
+
     await audit(request, "create_persona", "personas", persona["id"], {"name": req.name})
     return persona
 
@@ -290,4 +302,58 @@ async def update_queue_item(qid: str, req: QueueItemUpdate, request: Request,
     if not item:
         raise HTTPException(404, "Queue item not found")
     await audit(request, "update_queue_item", "social_content_queue", qid, data)
+    return item
+
+
+# ─── Social schedule config ──────────────────────────────────────────────────
+
+class ScheduleConfigUpsert(BaseModel):
+    platform: str
+    max_posts_per_day: int = 3
+    min_minutes_between_posts: int = 30
+    variation_hours: int = 2
+    skip_days_per_week: int = 1
+    value_to_promo_ratio: str = "9:1"
+    active: bool = True
+
+
+@router.get("/api/personas/{pid}/schedule")
+async def get_schedule_config(pid: str):
+    return await db.query("social_schedule_config", params={
+        "select": "*",
+        "persona_id": f"eq.{pid}",
+        "order": "platform.asc",
+    })
+
+
+@router.put("/api/personas/{pid}/schedule")
+async def upsert_schedule_config(pid: str, req: ScheduleConfigUpsert,
+                                  request: Request, _auth=Depends(require_auth)):
+    if not await db.get_by_id("personas", pid):
+        raise HTTPException(404, "Persona not found")
+
+    existing = await db.query("social_schedule_config", params={
+        "select": "id",
+        "persona_id": f"eq.{pid}",
+        "platform": f"eq.{req.platform}",
+        "limit": "1",
+    })
+    data = {
+        "persona_id": pid,
+        "platform": req.platform,
+        "max_posts_per_day": req.max_posts_per_day,
+        "min_minutes_between_posts": req.min_minutes_between_posts,
+        "variation_hours": req.variation_hours,
+        "skip_days_per_week": req.skip_days_per_week,
+        "value_to_promo_ratio": req.value_to_promo_ratio,
+        "active": req.active,
+    }
+    if existing:
+        item = await db.update("social_schedule_config", existing[0]["id"], data)
+    else:
+        item = await db.insert("social_schedule_config", data)
+    if not item:
+        raise HTTPException(500, "Failed to upsert schedule config")
+    await audit(request, "upsert_schedule_config", "social_schedule_config",
+                item["id"], {"persona_id": pid, "platform": req.platform})
     return item

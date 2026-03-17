@@ -3,6 +3,7 @@ CEREBRO — Persistent Job Queue
 Idempotent, survives restarts, state machine: queued→running→completed/failed→dead_lettered.
 """
 import asyncio
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -160,3 +161,69 @@ async def _handle_daily_aggregation(payload: dict) -> dict:
     target_date = payload.get("date")
     logger.info(f"Daily aggregation for {target_date} — stub (implement in Bloque 2.5)")
     return {"date": target_date, "status": "stub"}
+
+
+@register("partner_delivery")
+async def _handle_partner_delivery(payload: dict) -> dict:
+    """
+    Deliver a qualified lead to a partner webhook.
+    payload: {lead_id, site_id, webhook_id, webhook_url, webhook_secret, attempt}
+    Exponential backoff is handled by the job queue retry mechanism (max_attempts=3).
+    """
+    import hmac
+    import hashlib
+    import httpx
+
+    lead_id = payload["lead_id"]
+    site_id = payload.get("site_id")
+    webhook_url = payload["webhook_url"]
+    webhook_secret = payload.get("webhook_secret", "")
+    webhook_id = payload.get("webhook_id")
+
+    lead = await db.get_by_id("leads", lead_id)
+    if not lead:
+        raise ValueError(f"Lead {lead_id} not found")
+
+    body = {
+        "lead_id": lead_id,
+        "email": lead.get("email"),
+        "nombre": lead.get("nombre"),
+        "telefono": lead.get("telefono"),
+        "intent_score": lead.get("intent_score"),
+        "tema_interes": lead.get("tema_interes"),
+        "utm_source": lead.get("utm_source"),
+        "utm_medium": lead.get("utm_medium"),
+        "delivered_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # HMAC-SHA256 signature for verification
+    signature = ""
+    if webhook_secret:
+        sig_payload = json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode()
+        signature = hmac.new(webhook_secret.encode(), sig_payload, hashlib.sha256).hexdigest()
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Cerebro-Signature": signature,
+        "X-Cerebro-Lead-Id": lead_id,
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(webhook_url, json=body, headers=headers)
+        resp.raise_for_status()
+
+    # Record delivery event
+    await db.insert("lead_events", {
+        "site_id": site_id,
+        "lead_id": lead_id,
+        "from_status": "qualified",
+        "to_status": "delivered",
+        "reason": f"partner_delivery webhook_id={webhook_id}",
+        "triggered_by": "job_worker",
+    })
+
+    # Transition lead to delivered
+    await db.update("leads", lead_id, {"current_status": "delivered"})
+
+    logger.info(f"Partner delivery success: lead={lead_id} webhook={webhook_id} status={resp.status_code}")
+    return {"status": "delivered", "http_status": resp.status_code}

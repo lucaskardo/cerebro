@@ -121,16 +121,136 @@ JSON exacto:
     "target_persona": "descripción 1 línea del lector ideal"
 }}"""
 
-# Social adaptation prompts (Sprint 2)
-TIKTOK_ADAPT = """Convierte en guión TikTok 60s para finanzas Colombia.
-Hook (0-3s): dato sorprendente. Desarrollo (3-45s): 3 puntos. CTA (45-60s): link en bio.
-Tono: directo, energético, colombiano. NO mencionar partner directamente.
-JSON: {{"hook": "", "script": "", "cta": "", "hashtags": [], "caption": ""}}"""
+# ─── Social adaptation prompts (Bloque 5) ────────────────────────────────────
 
-INSTAGRAM_ADAPT = """Convierte en carrusel Instagram 7 slides finanzas Colombia.
-Slide 1: gancho. Slides 2-6: punto clave + dato. Slide 7: CTA + guarda.
-JSON: {{"slides": [{{"text": "", "visual_note": ""}}], "caption": "", "hashtags": []}}"""
+SOCIAL_SYSTEM = """Eres {persona_name}, experto en finanzas internacionales para colombianos.
+Tono: {brand_tone}. Plataforma: {platform}.
+Convierte contenido de blog en formato nativo de la plataforma.
+Responde SOLO en JSON válido."""
 
-TWITTER_ADAPT = """Convierte en thread X 5-7 tweets finanzas Colombia.
-Tweet 1: hook + 🧵. Tweets 2-5: insight cada uno. Tweet 6: resumen. Tweet 7: CTA + link.
-JSON: {{"tweets": [], "thread_hook": ""}}"""
+TIKTOK_ADAPT = """Convierte este artículo en guión TikTok 30-60s.
+
+Título: {title}
+Resumen: {summary}
+Puntos clave: {key_points}
+
+REGLAS:
+- Hook (0-3s): dato sorprendente o pregunta que genere curiosidad
+- Desarrollo (3-45s): máximo 3 puntos concretos, uno por "pantalla"
+- CTA (45-60s): "Link en bio para la guía completa"
+- Tono: directo, energético, colombiano auténtico
+- NO mencionar marcas comerciales directamente
+
+JSON exacto:
+{{
+    "hook": "frase gancho 0-3s (máx 15 palabras)",
+    "script": "guión completo con marcas de tiempo [0s] [5s] etc.",
+    "cta": "llamada a acción final",
+    "hashtags": ["5-8 hashtags relevantes sin #"],
+    "caption": "descripción del video máx 150 chars"
+}}"""
+
+INSTAGRAM_ADAPT = """Convierte este artículo en carrusel Instagram de 7 slides.
+
+Título: {title}
+Resumen: {summary}
+Puntos clave: {key_points}
+
+REGLAS:
+- Slide 1: gancho — promesa clara de valor
+- Slides 2-6: un punto clave por slide con dato concreto
+- Slide 7: CTA + "Guarda este post"
+- Texto corto por slide (máx 60 palabras)
+- Nota visual: qué imagen/gráfico poner
+
+JSON exacto:
+{{
+    "slides": [
+        {{"slide": 1, "text": "", "visual_note": "descripción imagen/gráfico"}}
+    ],
+    "caption": "caption del post con saltos de línea, máx 300 chars",
+    "hashtags": ["10-15 hashtags sin #"]
+}}"""
+
+TWITTER_ADAPT = """Convierte este artículo en thread X de 5-7 tweets.
+
+Título: {title}
+Resumen: {summary}
+Puntos clave: {key_points}
+URL: {article_url}
+
+REGLAS:
+- Tweet 1: hook potente + 🧵 (máx 240 chars)
+- Tweets 2-5: un insight por tweet, dato concreto
+- Tweet 6: resumen en 1 frase
+- Tweet 7: CTA + link al artículo
+- Cada tweet máx 280 chars
+
+JSON exacto:
+{{
+    "tweets": ["texto tweet 1", "texto tweet 2", ...],
+    "thread_hook": "el primer tweet (para preview)"
+}}"""
+
+LINKEDIN_ADAPT = """Convierte este artículo en post LinkedIn profesional.
+
+Título: {title}
+Resumen: {summary}
+Puntos clave: {key_points}
+URL: {article_url}
+
+REGLAS:
+- Primera línea: hook que rompa el scroll (pregunta o dato impactante)
+- Desarrollo: 3-4 párrafos cortos, bullets con ✓ o •
+- CTA final: invitar a leer el artículo completo
+- Tono: profesional pero accesible, no corporativo
+- Máx 1300 caracteres
+
+JSON exacto:
+{{
+    "post_text": "texto completo del post con saltos de línea reales \\n",
+    "hashtags": ["3-5 hashtags profesionales sin #"]
+}}"""
+
+REDDIT_ADAPT = """Convierte este artículo en post Reddit para comunidades de finanzas/Colombia.
+
+Título: {title}
+Resumen: {summary}
+Puntos clave: {key_points}
+URL: {article_url}
+
+REGLAS CRÍTICAS:
+- Tono: conversacional, honesto, NO publicitario
+- Formato: texto largo con análisis real (Reddit valora el esfuerzo)
+- Empezar con contexto personal o situación relatable
+- Incluir datos verificables con fuentes
+- CTA sutil al final (link al artículo como "fuente")
+- NUNCA sonar como spam o marketing
+- Sugerir subreddit apropiado
+
+JSON exacto:
+{{
+    "subreddit_suggestions": ["r/colombia", "r/PersonalFinanceLatam"],
+    "title": "título del post Reddit (descriptivo, no clickbait)",
+    "body": "cuerpo completo del post en Markdown de Reddit",
+    "flair": "flair sugerido si aplica"
+}}"""
+
+WHATSAPP_ADAPT = """Convierte este artículo en mensaje WhatsApp para grupos de finanzas.
+
+Título: {title}
+Resumen: {summary}
+Puntos clave: {key_points}
+URL: {article_url}
+
+REGLAS:
+- Máx 300 palabras, párrafos muy cortos
+- Emojis financieros naturales (💰 📊 🇨🇴)
+- Bullet points con puntos clave
+- Link al final como "Lee más:"
+- Tono: amigo que comparte info útil
+
+JSON exacto:
+{{
+    "message": "texto completo del mensaje WhatsApp con emojis y saltos \\n"
+}}"""
