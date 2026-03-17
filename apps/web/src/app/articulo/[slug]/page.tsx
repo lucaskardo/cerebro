@@ -1,24 +1,39 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { api } from "@/lib/api";
+import { api, Site } from "@/lib/api";
 import EmailCaptureForm from "@/components/EmailCaptureForm";
 import ReadingProgress from "@/components/ReadingProgress";
 import TableOfContents from "@/components/TableOfContents";
 import SocialShare from "@/components/SocialShare";
 
-const SITE_URL = `https://${process.env.PRIMARY_DOMAIN || "dolarafuera.co"}`;
-const AUTHOR = "Carlos Medina";
+const DEFAULT_DOMAIN = process.env.PRIMARY_DOMAIN || "dolarafuera.co";
+const SITE_URL = `https://${DEFAULT_DOMAIN}`;
+const DEFAULT_BRAND = "Dólar Afuera";
+const DEFAULT_AUTHOR = "Carlos Medina";
+
+async function getSiteForArticle(siteId: string | null | undefined): Promise<Site | null> {
+  if (!siteId) return null;
+  try {
+    const sites = await api.sites();
+    return sites.find((s) => s.id === siteId) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── SEO Metadata ─────────────────────────────────────────────────────────────
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   try {
     const { slug } = await params;
     const article = await api.contentBySlug(slug);
+    const site = await getSiteForArticle(article.mission_id ? null : null);
+    const brandName = site?.brand_name || DEFAULT_BRAND;
+    const authorName = site?.author_name || DEFAULT_AUTHOR;
     const url = `${SITE_URL}/articulo/${slug}`;
     const ogImage = `${SITE_URL}/api/og?title=${encodeURIComponent(article.title)}&slug=${slug}`;
     return {
-      title: `${article.title} | Dólar Afuera`,
+      title: `${article.title} | ${brandName}`,
       description: article.meta_description,
       alternates: { canonical: url },
       openGraph: {
@@ -28,8 +43,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
         type: "article",
         publishedTime: article.created_at,
         modifiedTime: article.updated_at,
-        authors: [AUTHOR],
-        siteName: "Dólar Afuera",
+        authors: [authorName],
+        siteName: brandName,
         images: [{ url: ogImage, width: 1200, height: 630, alt: article.title }],
       },
       twitter: {
@@ -41,18 +56,23 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       robots: { index: true, follow: true },
     };
   } catch {
-    return { title: "Artículo | Dólar Afuera" };
+    return { title: `Artículo | ${DEFAULT_BRAND}` };
   }
 }
 
 // ─── Schema helpers ────────────────────────────────────────────────────────────
-function articleSchema(article: Awaited<ReturnType<typeof api.contentBySlug>>, url: string) {
+function articleSchema(
+  article: Awaited<ReturnType<typeof api.contentBySlug>>,
+  url: string,
+  brandName: string,
+  authorName: string,
+) {
   return {
     "@context": "https://schema.org", "@type": "Article",
     headline: article.title.substring(0, 110),
     description: article.meta_description,
-    author: { "@type": "Person", name: AUTHOR, jobTitle: "Especialista en Finanzas Internacionales", url: SITE_URL },
-    publisher: { "@type": "Organization", name: "Dólar Afuera", url: SITE_URL },
+    author: { "@type": "Person", name: authorName, url: SITE_URL },
+    publisher: { "@type": "Organization", name: brandName, url: SITE_URL },
     datePublished: article.created_at, dateModified: article.updated_at,
     mainEntityOfPage: { "@type": "WebPage", "@id": url },
     inLanguage: "es-CO",
@@ -165,6 +185,17 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
     return notFound();
   }
 
+  // Fetch site brand data in parallel with related articles
+  const [siteResult, relatedResult] = await Promise.allSettled([
+    getSiteForArticle(article.mission_id ? null : null),
+    api.relatedContent(20),
+  ]);
+
+  const site = siteResult.status === "fulfilled" ? siteResult.value : null;
+  const brandName = site?.brand_name || DEFAULT_BRAND;
+  const authorName = site?.author_name || DEFAULT_AUTHOR;
+  const authorBio = site?.author_bio || "10+ años ayudando a colombianos a acceder al sistema financiero global.";
+
   const url = `${SITE_URL}/articulo/${slug}`;
   const faqs = article.faq_section ?? [];
   const readingTime = Math.ceil((article.body_md?.split(" ").length ?? 0) / 200);
@@ -176,8 +207,8 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
   // Related articles
   let related: Awaited<ReturnType<typeof api.relatedContent>> = [];
   try {
-    const all = await api.relatedContent(20);
-    related = all.filter((a) => a.slug !== slug).slice(0, 4);
+    const allRelated = relatedResult.status === "fulfilled" ? relatedResult.value : [];
+    related = allRelated.filter((a) => a.slug !== slug).slice(0, 4);
   } catch { related = []; }
 
   const proseClasses = [
@@ -195,7 +226,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
   return (
     <>
       {/* Schema markup */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema(article, url)) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema(article, url, brandName, authorName)) }} />
       {faqs.length > 0 && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema(faqs)) }} />}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema(article.title, slug)) }} />
 
@@ -237,11 +268,11 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
           <div className="flex flex-wrap items-center gap-4 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center text-green-400 text-sm font-bold font-ui shrink-0">
-                C
+                {authorName.charAt(0)}
               </div>
               <div>
-                <div className="text-slate-200 font-medium font-ui text-sm">{AUTHOR}</div>
-                <div className="text-slate-500 text-xs font-ui">Especialista en Finanzas</div>
+                <div className="text-slate-200 font-medium font-ui text-sm">{authorName}</div>
+                <div className="text-slate-500 text-xs font-ui">{brandName}</div>
               </div>
             </div>
             <span className="text-slate-700">·</span>
@@ -337,16 +368,16 @@ export default async function ArticlePage({ params }: { params: Promise<{ slug: 
                 className="w-14 h-14 rounded-full bg-gradient-to-br from-green-500/30 to-emerald-600/20 border border-green-500/30 flex items-center justify-center text-green-400 font-bold text-xl shrink-0 font-display"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                C
+                {authorName.charAt(0)}
               </div>
               <div>
-                <div className="font-semibold text-slate-200 font-ui">{AUTHOR}</div>
-                <div className="text-xs text-green-400 font-ui mb-2">Especialista en Finanzas Internacionales</div>
+                <div className="font-semibold text-slate-200 font-ui">{authorName}</div>
+                <div className="text-xs text-green-400 font-ui mb-2">{brandName}</div>
                 <p
                   className="text-sm text-slate-400 leading-relaxed"
                   style={{ fontFamily: "var(--font-body)" }}
                 >
-                  10+ años ayudando a colombianos a acceder al sistema financiero global. Vive entre Bogotá y Ciudad de Panamá.
+                  {authorBio}
                 </p>
               </div>
             </div>

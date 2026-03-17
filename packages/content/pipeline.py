@@ -1,11 +1,13 @@
 """
 CEREBRO v7 — Content Pipeline
-keyword → brief → draft → humanize → validate → publish
+keyword → research → brief → draft → humanize → validate → publish
 """
 import json
 import re
 import uuid
-from urllib.parse import urlparse, urlencode, parse_qs, urlunparse, urljoin
+from typing import Optional
+from urllib.parse import urlencode
+
 from packages.core import db, get_logger, create_alert
 from packages.ai import complete, BudgetExceededError
 from packages.ai.prompts import content_prompts as prompts
@@ -34,6 +36,24 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
     # Merge brand config into mission context
     brand = _build_brand_context(mission, site)
 
+    # Dedup check — skip if very similar keyword already exists for this site
+    if site_id:
+        dup = await _check_duplicate(keyword, site_id, exclude_id=asset_id)
+        if dup:
+            logger.warning(
+                f"[{run_id}] Duplicate keyword '{keyword}' overlaps "
+                f"'{dup.get('keyword')}' (id={dup.get('id')}). Skipping pipeline."
+            )
+            if asset_id:
+                await db.update("content_assets", asset_id, {
+                    "status": "error",
+                    "error_message": (
+                        f"Keyword duplicado: similar a '{dup.get('keyword')}' "
+                        f"(id: {dup.get('id')})"
+                    ),
+                })
+            return dup
+
     # Create or get asset
     if not asset_id:
         asset = await db.insert("content_assets", {
@@ -48,9 +68,23 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         await db.update("content_assets", asset_id, {"status": "generating"})
 
     try:
+        # STEP 0: Research
+        logger.info(f"[{run_id}] Step 0/4: Researching keyword...")
+        research = await _research_keyword(keyword, brand, run_id)
+        conversion_plan = {
+            "primary_cta": research.get("primary_cta", ""),
+            "secondary_cta": research.get("secondary_cta", ""),
+            "funnel_stage": research.get("target_funnel_stage", "awareness"),
+            "target_persona": research.get("target_persona", ""),
+        }
+        await db.update("content_assets", asset_id, {
+            "research_json": research,
+            "conversion_plan_json": conversion_plan,
+        })
+
         # STEP 1: Brief
         logger.info(f"[{run_id}] Step 1/4: Generating brief...")
-        brief = await _generate_brief(keyword, brand, run_id)
+        brief = await _generate_brief(keyword, brand, research, run_id)
         await db.update("content_assets", asset_id, {"brief": brief})
 
         # STEP 2: Draft
@@ -125,9 +159,69 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         raise
 
 
-async def _generate_brief(keyword: str, brand: dict, run_id: str) -> dict:
+# ─── Step helpers ─────────────────────────────────────────────────────────────
+
+async def _check_duplicate(keyword: str, site_id: str, exclude_id: Optional[str] = None) -> Optional[dict]:
+    """
+    Check for keyword overlap >= 80% (Jaccard) with existing assets for this site.
+    Returns the overlapping asset dict or None.
+    """
+    existing = await db.query("content_assets", params={
+        "select": "id,title,keyword,status",
+        "site_id": f"eq.{site_id}",
+        "status": "not.in.(error,archived)",
+        "limit": "100",
+    })
+    words_new = set(keyword.lower().split())
+    if not words_new:
+        return None
+
+    for asset in existing:
+        if asset.get("id") == exclude_id:
+            continue
+        kw = asset.get("keyword") or ""
+        words_ex = set(kw.lower().split())
+        if not words_ex:
+            continue
+        union = words_new | words_ex
+        overlap = len(words_new & words_ex) / len(union)
+        if overlap >= 0.8:
+            return asset
+    return None
+
+
+async def _research_keyword(keyword: str, brand: dict, run_id: str) -> dict:
+    result = await complete(
+        prompt=prompts.RESEARCH_USER.format(
+            keyword=keyword,
+            partner_name=brand.get("partner_name", ""),
+            country=brand.get("country", "Colombia"),
+            target_audience=json.dumps(brand.get("target_audience", {}), ensure_ascii=False),
+            core_topics=json.dumps(brand.get("core_topics", []), ensure_ascii=False),
+        ),
+        system=prompts.RESEARCH_SYSTEM,
+        model="haiku",
+        json_mode=True,
+        pipeline_step="research",
+        run_id=run_id,
+    )
+    return result["parsed"] or {}
+
+
+async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str) -> dict:
     audience = brand.get("target_audience", {})
     audience_summary = ", ".join(audience.get("segments", [])) if isinstance(audience, dict) else str(audience)
+
+    # Enrich prompt with research context
+    research_context = ""
+    if research:
+        research_context = (
+            f"\nResearch context:\n"
+            f"- Pain points: {json.dumps(research.get('pain_points', []), ensure_ascii=False)}\n"
+            f"- Differentiation: {research.get('differentiation', '')}\n"
+            f"- Funnel stage: {research.get('target_funnel_stage', '')}\n"
+            f"- Primary CTA: {research.get('primary_cta', '')}\n"
+        )
 
     result = await complete(
         prompt=prompts.BRIEF_USER.format(
@@ -137,7 +231,7 @@ async def _generate_brief(keyword: str, brand: dict, run_id: str) -> dict:
             target_audience=json.dumps(brand.get("target_audience", {}), ensure_ascii=False),
             core_topics=json.dumps(brand.get("core_topics", []), ensure_ascii=False),
             cta_config=json.dumps(brand.get("cta_config", {}), ensure_ascii=False),
-        ),
+        ) + research_context,
         system=prompts.BRIEF_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "Carlos Medina, especialista en finanzas internacionales"),
             brand_tone=brand.get("brand_tone", "amigo que sabe de finanzas, cercano"),
@@ -324,8 +418,7 @@ def _build_brand_context(mission: dict, site: dict = None) -> dict:
 
 def _slugify(text: str) -> str:
     """Convert text to URL-safe slug."""
-    import re
-    replacements = {"á":"a","é":"e","í":"i","ó":"o","ú":"u","ñ":"n","ü":"u"}
+    replacements = {"á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ñ": "n", "ü": "u"}
     slug = text.lower()
     for k, v in replacements.items():
         slug = slug.replace(k, v)

@@ -6,11 +6,13 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       { userAgent: "*", allow: "/" },
-      // Allow AI crawlers (critical for AI Overviews / Perplexity)
+      // AI crawlers — critical for AI Overviews, Perplexity, Claude, etc.
+      { userAgent: "Googlebot", allow: "/" },
       { userAgent: "OAI-SearchBot", allow: "/" },
       { userAgent: "ChatGPT-User", allow: "/" },
       { userAgent: "PerplexityBot", allow: "/" },
       { userAgent: "ClaudeBot", allow: "/" },
+      { userAgent: "Bytespider", allow: "/" },
     ],
     sitemap: `${BASE_URL}/sitemap.xml`,
   };

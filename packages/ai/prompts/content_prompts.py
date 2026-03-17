@@ -99,6 +99,28 @@ JSON:
     "humanization_score": 0-100
 }}"""
 
+RESEARCH_SYSTEM = """Eres analista de contenido SEO. Analizas keywords para identificar ángulos de conversión y diferenciación.
+Responde SOLO en JSON válido."""
+
+RESEARCH_USER = """Analiza el keyword: "{keyword}"
+
+Contexto:
+- Partner/marca: {partner_name}
+- País: {country}
+- Audiencia: {target_audience}
+- Topics: {core_topics}
+
+JSON exacto:
+{{
+    "competitor_notes": "qué publica la competencia sobre este tema (1-2 oraciones)",
+    "pain_points": ["3-5 dolores reales del lector al buscar este keyword"],
+    "differentiation": "ángulo único que nos diferencia de competencia",
+    "target_funnel_stage": "awareness|consideration|decision",
+    "primary_cta": "acción principal que queremos del lector (texto del botón)",
+    "secondary_cta": "acción secundaria alternativa (texto del botón)",
+    "target_persona": "descripción 1 línea del lector ideal"
+}}"""
+
 # Social adaptation prompts (Sprint 2)
 TIKTOK_ADAPT = """Convierte en guión TikTok 60s para finanzas Colombia.
 Hook (0-3s): dato sorprendente. Desarrollo (3-45s): 3 puntos. CTA (45-60s): link en bio.

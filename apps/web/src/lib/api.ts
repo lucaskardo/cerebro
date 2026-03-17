@@ -80,6 +80,8 @@ export interface Site {
   brand_audience: Record<string, unknown> | null;
   brand_topics: string[] | null;
   brand_cta: Record<string, unknown> | null;
+  author_name: string | null;
+  author_bio: string | null;
   status: string;
   site_type: string;
 }

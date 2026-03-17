@@ -28,6 +28,14 @@ async def lifespan(app: FastAPI):
     auth_status = "configured" if config.API_SECRET_KEY else "⚠ NOT SET"
     logger.info(f"Auth: {auth_status} | Flags: auto_publish={config.AUTO_PUBLISH}")
 
+    # Seed prompt versions to DB (idempotent)
+    try:
+        from packages.content.prompt_store import seed_prompts
+        await seed_prompts()
+        logger.info("Prompt versions seeded")
+    except Exception as e:
+        logger.warning(f"Prompt seed failed (non-fatal): {e}")
+
     # Start job worker in background
     from packages.jobs import run_worker
     worker_task = asyncio.create_task(run_worker(interval_seconds=30))
