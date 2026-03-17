@@ -3,7 +3,9 @@ CEREBRO v7 — Content Pipeline
 keyword → brief → draft → humanize → validate → publish
 """
 import json
+import re
 import uuid
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse, urljoin
 from packages.core import db, get_logger, create_alert
 from packages.ai import complete, BudgetExceededError
 from packages.ai.prompts import content_prompts as prompts
@@ -67,10 +69,16 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         # STEP 3: Humanize
         logger.info(f"[{run_id}] Step 3/4: Humanizing...")
         humanized = await _humanize(draft, brand, run_id)
+
+        # Inject UTM params into all article links
+        raw_html = humanized.get("body_html", "")
+        site_slug = site.get("domain", "cerebro").split(".")[0] if site else "cerebro"
+        body_html_with_utm = _inject_utm_params(raw_html, site_slug, asset_id)
+
         await db.update("content_assets", asset_id, {
             "title": humanized.get("title", draft.get("title")),
             "body_md": humanized.get("body_md", draft.get("body_md")),
-            "body_html": humanized.get("body_html", ""),
+            "body_html": body_html_with_utm,
             "humanization_score": humanized.get("humanization_score", 0),
         })
 
@@ -249,6 +257,43 @@ def _validate(content: dict, keyword: str, brand: dict) -> dict:
         "seo": seo,
         "issues": [k for k, v in checks.items() if not v],
     }
+
+
+def _inject_utm_params(body_html: str, site_slug: str, asset_id: str) -> str:
+    """
+    Inject UTM parameters into all <a href> tags in the article HTML.
+    Only modifies relative URLs and URLs pointing to known domains.
+    Skips anchors (#), mailto:, external partner links that already have UTM.
+    """
+    if not body_html:
+        return body_html
+
+    utm = {
+        "utm_source": "cerebro",
+        "utm_medium": "article",
+        "utm_campaign": site_slug,
+        "utm_content": asset_id[:8],
+    }
+    utm_str = urlencode(utm)
+
+    def replace_href(match):
+        full_tag = match.group(0)
+        href = match.group(1)
+
+        # Skip anchors, mailto, tel, javascript, already-utm'd links
+        if href.startswith(("#", "mailto:", "tel:", "javascript:")):
+            return full_tag
+        if "utm_source" in href:
+            return full_tag
+
+        # Add UTM params
+        sep = "&" if "?" in href else "?"
+        new_href = f"{href}{sep}{utm_str}"
+        return full_tag.replace(f'href="{href}"', f'href="{new_href}"', 1)
+
+    # Match href="..." (double quotes only for safety)
+    result = re.sub(r'<a\s[^>]*href="([^"]*)"[^>]*>', replace_href, body_html, flags=re.IGNORECASE)
+    return result
 
 
 def _build_brand_context(mission: dict, site: dict = None) -> dict:

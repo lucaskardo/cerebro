@@ -117,6 +117,48 @@ export interface Funnel {
   leads_captured: number;
   conversions: number;
   conversion_rate: number;
+  // new spine fields
+  visitors?: number;
+  sessions?: number;
+  leads?: number;
+  qualified?: number;
+  accepted?: number;
+  lead_rate?: number;
+  qualify_rate?: number;
+}
+
+export interface LeadsByAsset {
+  asset_id: string;
+  total: number;
+  qualified: number;
+}
+
+export interface LeadsByBrand {
+  site_id: string;
+  total: number;
+  qualified: number;
+}
+
+export interface LeadsByCta {
+  cta_variant: string;
+  total: number;
+  qualified: number;
+}
+
+export interface RevenueByAsset {
+  asset_id: string;
+  revenue: number;
+}
+
+export interface BusinessHealth {
+  leads_today: number;
+  leads_this_week: number;
+  articles_published_week: number;
+  error_rate_24h: number;
+  cost_today: number;
+  top_performing_asset_title: string | null;
+  budget_remaining: number;
+  budget_warning: boolean;
 }
 
 export interface Persona {
@@ -185,6 +227,17 @@ export const api = {
   goals: () => fetchAPI<Goal[]>("/api/goals"),
   strategies: (goalId?: string) => fetchAPI<Strategy[]>(`/api/strategies${goalId ? `?goal_id=${goalId}` : ""}`),
   funnel: (days = 30) => fetchAPI<Funnel>(`/api/attribution/funnel?days=${days}`),
+  funnelNew: (days = 30, siteId?: string) =>
+    fetchAPI<Funnel>(`/api/reports/funnel?days=${days}${siteId ? `&site_id=${siteId}` : ""}`),
+  leadsByAsset: (days = 30, siteId?: string) =>
+    fetchAPI<LeadsByAsset[]>(`/api/reports/leads-by-asset?days=${days}${siteId ? `&site_id=${siteId}` : ""}`),
+  leadsByBrand: (days = 30) =>
+    fetchAPI<LeadsByBrand[]>(`/api/reports/leads-by-brand?days=${days}`),
+  leadsByCta: (days = 30, siteId?: string) =>
+    fetchAPI<LeadsByCta[]>(`/api/reports/leads-by-cta?days=${days}${siteId ? `&site_id=${siteId}` : ""}`),
+  revenueByAsset: (siteId?: string) =>
+    fetchAPI<RevenueByAsset[]>(`/api/reports/revenue-by-asset${siteId ? `?site_id=${siteId}` : ""}`),
+  businessHealth: () => fetchAPI<BusinessHealth>("/api/health/business"),
   sites: () => fetchAPI<Site[]>("/api/sites"),
   relatedContent: (limit = 5) => fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
   contentBySite: (siteId: string, limit = 20) =>

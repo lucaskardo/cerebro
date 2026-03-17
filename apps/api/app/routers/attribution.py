@@ -1,9 +1,10 @@
 """Attribution events, visitor/session tracking, reports."""
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Optional
 
 from packages.core import db, get_logger
+from apps.api.app.middleware.ratelimit import rate_limit
 
 logger = get_logger("router.attribution")
 router = APIRouter()
@@ -41,8 +42,11 @@ class SessionCreate(BaseModel):
 
 # ─── Tracking (public, lightweight) ─────────────────────────────────────────
 
+_rl60 = rate_limit(60, 60)   # 60 req/min per IP for all tracking endpoints
+
+
 @router.post("/api/tracking/visitor")
-async def track_visitor(req: VisitorCreate):
+async def track_visitor(req: VisitorCreate, _rl=Depends(_rl60)):
     """Create or return visitor by fingerprint."""
     if req.fingerprint_hash:
         existing = await db.query("visitors", params={
@@ -65,7 +69,7 @@ async def track_visitor(req: VisitorCreate):
 
 
 @router.post("/api/tracking/session")
-async def track_session(req: SessionCreate):
+async def track_session(req: SessionCreate, _rl=Depends(_rl60)):
     """Create a new session."""
     session = await db.insert("sessions", {
         "site_id": req.site_id,
@@ -81,7 +85,7 @@ async def track_session(req: SessionCreate):
 
 
 @router.post("/api/tracking/event")
-async def track_event_new(body: dict):
+async def track_event_new(body: dict, _rl=Depends(_rl60)):
     """Create a touchpoint. Public, lightweight."""
     required = {"site_id", "event_type"}
     if not required.issubset(body.keys()):
@@ -234,6 +238,25 @@ async def revenue_by_asset(site_id: Optional[str] = None):
 
     return [{"asset_id": k, "revenue": round(v, 2)}
             for k, v in sorted(asset_rev.items(), key=lambda x: x[1], reverse=True)]
+
+
+@router.get("/api/reports/leads-by-cta")
+async def leads_by_cta(site_id: Optional[str] = None, days: int = 30):
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=days)).isoformat()
+    params = {"select": "cta_variant,current_status", "created_at": f"gte.{since}T00:00:00Z"}
+    if site_id:
+        params["site_id"] = f"eq.{site_id}"
+    leads = await db.query("leads", params=params)
+    counts: dict = {}
+    for l in leads:
+        cta = l.get("cta_variant") or "unknown"
+        if cta not in counts:
+            counts[cta] = {"cta_variant": cta, "total": 0, "qualified": 0}
+        counts[cta]["total"] += 1
+        if l.get("current_status") in ("qualified", "delivered", "accepted"):
+            counts[cta]["qualified"] += 1
+    return sorted(counts.values(), key=lambda x: x["total"], reverse=True)
 
 
 @router.get("/api/channels/performance")
