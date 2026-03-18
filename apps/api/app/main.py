@@ -114,6 +114,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         f"https://{config.PRIMARY_DOMAIN}",
+        "https://web-ten-woad-99.vercel.app",
+        "https://web-a1uf6mml9-lucaskardos-projects.vercel.app",
         *_extra_origins,
     ],
     allow_origin_regex=r"https://.*\.vercel\.app",
@@ -145,10 +147,16 @@ async def add_version_header(request: Request, call_next):
 async def global_exception_handler(request: Request, exc: Exception):
     request_id = getattr(request.state, "request_id", "unknown")
     logger.error(f"[{request_id}] Unhandled error on {request.url.path}: {exc}")
+    headers = {"X-API-Version": "1"}
+    # Ensure CORS headers are present even on 500s
+    origin = request.headers.get("origin", "")
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error", "request_id": request_id, "detail": str(exc)},
-        headers={"X-API-Version": "1"},
+        headers=headers,
     )
 
 

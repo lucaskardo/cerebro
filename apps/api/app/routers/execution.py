@@ -1,6 +1,7 @@
 """Execution engine: opportunities, experiments, tasks, approvals."""
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
+from fastapi.responses import JSONResponse
 from typing import Optional
 
 from packages.core import db, get_logger
@@ -119,14 +120,18 @@ async def list_experiments(
     status: Optional[str] = None,
     opportunity_id: Optional[str] = None,
 ):
-    params = {"select": "*", "order": "created_at.desc", "limit": "50"}
-    if site_id:
-        params["site_id"] = f"eq.{site_id}"
-    if status:
-        params["status"] = f"eq.{status}"
-    if opportunity_id:
-        params["opportunity_id"] = f"eq.{opportunity_id}"
-    return await db.query("experiments", params=params)
+    try:
+        params = {"select": "*", "order": "created_at.desc", "limit": "50"}
+        if site_id:
+            params["site_id"] = f"eq.{site_id}"
+        if status:
+            params["status"] = f"eq.{status}"
+        if opportunity_id:
+            params["opportunity_id"] = f"eq.{opportunity_id}"
+        return await db.query("experiments", params=params)
+    except Exception as e:
+        logger.error(f"list_experiments error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e), "data": []})
 
 
 @router.get("/api/experiments/{eid}")

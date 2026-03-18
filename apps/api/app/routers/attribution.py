@@ -1,5 +1,6 @@
 """Attribution events, visitor/session tracking, reports."""
 from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -181,37 +182,41 @@ async def leads_by_brand(days: int = 30):
 
 @router.get("/api/reports/funnel")
 async def funnel_report(site_id: Optional[str] = None, days: int = 30):
-    from datetime import date, timedelta
-    since = (date.today() - timedelta(days=days)).isoformat()
+    try:
+        from datetime import date, timedelta
+        since = (date.today() - timedelta(days=days)).isoformat()
 
-    visitors_q = {"select": "id", "created_at": f"gte.{since}T00:00:00Z"}
-    sessions_q = {"select": "id", "started_at": f"gte.{since}T00:00:00Z"}
-    leads_q = {"select": "id,current_status", "created_at": f"gte.{since}T00:00:00Z"}
+        visitors_q = {"select": "id", "created_at": f"gte.{since}T00:00:00Z"}
+        sessions_q = {"select": "id", "started_at": f"gte.{since}T00:00:00Z"}
+        leads_q = {"select": "id,current_status", "created_at": f"gte.{since}T00:00:00Z"}
 
-    if site_id:
-        visitors_q["site_id"] = f"eq.{site_id}"
-        sessions_q["site_id"] = f"eq.{site_id}"
-        leads_q["site_id"] = f"eq.{site_id}"
+        if site_id:
+            visitors_q["site_id"] = f"eq.{site_id}"
+            sessions_q["site_id"] = f"eq.{site_id}"
+            leads_q["site_id"] = f"eq.{site_id}"
 
-    visitors = await db.query("visitors", params=visitors_q)
-    sessions = await db.query("sessions", params=sessions_q)
-    leads = await db.query("leads", params=leads_q)
+        visitors = await db.query("visitors", params=visitors_q)
+        sessions = await db.query("sessions", params=sessions_q)
+        leads = await db.query("leads", params=leads_q)
 
-    qualified = sum(1 for l in leads if l.get("current_status") in ("qualified","delivered","accepted","closed"))
-    accepted = sum(1 for l in leads if l.get("current_status") in ("accepted",))
+        qualified = sum(1 for l in leads if l.get("current_status") in ("qualified","delivered","accepted","closed"))
+        accepted = sum(1 for l in leads if l.get("current_status") in ("accepted",))
 
-    total_leads = len(leads)
-    total_sessions = len(sessions)
-    return {
-        "period_days": days,
-        "visitors": len(visitors),
-        "sessions": total_sessions,
-        "leads": total_leads,
-        "qualified": qualified,
-        "accepted": accepted,
-        "lead_rate": round(total_leads / total_sessions * 100, 2) if total_sessions else 0,
-        "qualify_rate": round(qualified / total_leads * 100, 2) if total_leads else 0,
-    }
+        total_leads = len(leads)
+        total_sessions = len(sessions)
+        return {
+            "period_days": days,
+            "visitors": len(visitors),
+            "sessions": total_sessions,
+            "leads": total_leads,
+            "qualified": qualified,
+            "accepted": accepted,
+            "lead_rate": round(total_leads / total_sessions * 100, 2) if total_sessions else 0,
+            "qualify_rate": round(qualified / total_leads * 100, 2) if total_leads else 0,
+        }
+    except Exception as e:
+        logger.error(f"funnel_report error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e), "period_days": days, "visitors": 0, "sessions": 0, "leads": 0, "qualified": 0, "accepted": 0, "lead_rate": 0, "qualify_rate": 0})
 
 
 @router.get("/api/reports/revenue-by-asset")
