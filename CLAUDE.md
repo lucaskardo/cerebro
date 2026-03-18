@@ -51,6 +51,32 @@ Skills to build (priority order):
 - **social_distribution** — adapt content to Instagram/TikTok/X/LinkedIn
 - **conversion_optimizer** — A/B test headlines, CTAs, layouts
 
+## Client Intelligence Layer
+
+CEREBRO maintains a living memory of each client's business and market.
+
+When a new client is onboarded:
+1. Operator provides: company name, country, industry, website
+2. System runs deep market research automatically via `POST /api/intelligence/research`
+3. Research is stored in `client_profiles` and `market_research` tables
+4. ALL content generation uses client intelligence (never generic)
+5. ALL strategy decisions use client intelligence
+6. Research can be refreshed anytime via `POST /api/intelligence/refresh/{site_id}`
+
+The system NEVER generates generic marketing content.
+Every piece of content must be informed by:
+- Client's value proposition and differentiators
+- Target audience pain points and desires
+- Competitor landscape and positioning gaps
+- Market trends and buying triggers
+
+If no `client_profile` exists for a site, the system warns the operator
+and uses minimal brand context from `domain_sites` as fallback.
+
+Key module: `packages/intelligence/__init__.py` — `ClientIntelligence` class
+Key method: `get_content_context(site_id)` — injected into ALL content prompts
+Key method: `get_strategy_context(site_id)` — injected into ALL strategy prompts
+
 ## File Map
 ```
 cerebro/
