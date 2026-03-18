@@ -149,10 +149,68 @@ class ClientIntelligence:
         return await self.get_profile(site_id) or {}
 
     async def refresh_research(self, site_id: str, focus_areas: list = None) -> dict:
-        """Re-run research, merging new data additively."""
+        """Re-run research, merging new data additively. If focus_areas provided, targets those areas."""
         profile = await self.get_profile(site_id)
         if not profile:
             raise ValueError(f"No client profile found for site_id={site_id}. Run research_client first.")
+
+        if focus_areas:
+            # Run targeted research with focus areas noted in the prompt
+            logger.info(f"Refreshing research for {profile['company_name']}, focus: {focus_areas}")
+            now = datetime.now(timezone.utc).isoformat()
+
+            focused_prompt = _RESEARCH_PROMPT.format(
+                company=profile["company_name"],
+                country=profile["country"],
+                industry=profile.get("industry") or "general business",
+                company_url=profile.get("company_url") or "not provided",
+            ) + f"\n\nFOCUS AREAS: Provide especially detailed analysis for these areas: {', '.join(focus_areas)}. You still must return the full JSON structure, but go deeper on these topics."
+
+            result = await complete(
+                prompt=focused_prompt,
+                system=_RESEARCH_SYSTEM,
+                model="sonnet",
+                json_mode=True,
+                pipeline_step="client_research_focused",
+            )
+            data = result.get("parsed") or {}
+
+            if data and profile.get("id"):
+                # Store as focused research entry
+                await db.insert("market_research", {
+                    "site_id": site_id,
+                    "profile_id": profile["id"],
+                    "research_type": "company_analysis",
+                    "query": f"Focused refresh ({', '.join(focus_areas)}): {profile['company_name']}",
+                    "findings": str(data)[:5000],
+                    "structured_data": data,
+                    "confidence": "high",
+                    "applied_to_profile": True,
+                })
+                # Merge only focus area fields back into profile
+                field_map = {
+                    "competitors": "competitors",
+                    "pain_points": "pain_points",
+                    "market_trends": "market_trends",
+                    "content_angles": "content_angles",
+                    "customer_objections": "customer_objections",
+                    "buying_triggers": "buying_triggers",
+                    "target_segments": "target_segments",
+                    "key_differentiators": "key_differentiators",
+                    "advantages": "advantages",
+                    "weaknesses": "weaknesses",
+                }
+                update = {"updated_at": now, "last_researched_at": now,
+                          "research_version": (profile.get("research_version") or 0) + 1}
+                for area in focus_areas:
+                    if area in field_map:
+                        field = field_map[area]
+                        if data.get(field):
+                            update[field] = data[field]
+                if update:
+                    await db.update("client_profiles", profile["id"], update)
+
+            return await self.get_profile(site_id) or {}
 
         return await self.research_client(
             site_id=site_id,
