@@ -4,8 +4,22 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
+
+function authHdrs(): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (API_KEY) h["x-api-key"] = API_KEY;
+  return h;
+}
 
 type Tab = "jobs" | "flags" | "alerts" | "audit";
+
+interface DbFlag {
+  id: string;
+  site_id: string | null;
+  flag_name: string;
+  enabled: boolean;
+}
 
 interface Job {
   id: string;
@@ -77,6 +91,7 @@ function SystemContent() {
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [auditSearch, setAuditSearch] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
+  const [dbFlags, setDbFlags] = useState<DbFlag[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
@@ -123,10 +138,25 @@ function SystemContent() {
     }
   }, []);
 
+  const loadFlags = useCallback(async () => {
+    setLoading(true);
+    try {
+      const q = new URLSearchParams();
+      if (siteId) q.set("site_id", siteId);
+      const res = await fetch(`${API_URL}/api/flags${q.toString() ? `?${q}` : ""}`, { headers: authHdrs() });
+      if (!res.ok) throw new Error(`${res.status}`);
+      setDbFlags(await res.json());
+    } catch (e) {
+      showToast(`Failed to load flags: ${e}`, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [siteId]);
+
   const loadAudit = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/audit?limit=100`);
+      const res = await fetch(`${API_URL}/api/audit?limit=100`, { headers: authHdrs() });
       if (!res.ok) throw new Error(`${res.status}`);
       setAudit(await res.json());
     } catch (e) {
@@ -139,15 +169,16 @@ function SystemContent() {
 
   useEffect(() => {
     loadStatus();
-    if (tab === "jobs" || tab === "flags") loadJobs();
+    if (tab === "jobs") loadJobs();
+    if (tab === "flags") loadFlags();
     if (tab === "alerts") loadAlerts();
     if (tab === "audit") loadAudit();
-  }, [tab, loadJobs, loadAlerts, loadAudit, loadStatus]);
+  }, [tab, loadJobs, loadFlags, loadAlerts, loadAudit, loadStatus]);
 
   const retryJob = async (id: string) => {
     setRetrying((s) => new Set(s).add(id));
     try {
-      const res = await fetch(`${API_URL}/api/tasks/${id}/retry`, { method: "POST" });
+      const res = await fetch(`${API_URL}/api/tasks/${id}/run`, { method: "POST", headers: authHdrs() });
       if (!res.ok) throw new Error(`${res.status}`);
       showToast("Job queued for retry", "success");
       loadJobs();
@@ -161,7 +192,7 @@ function SystemContent() {
   const dismissAlert = async (id: string) => {
     setDismissing((s) => new Set(s).add(id));
     try {
-      const res = await fetch(`${API_URL}/api/alerts/${id}/dismiss`, { method: "POST" });
+      const res = await fetch(`${API_URL}/api/alerts/${id}/dismiss`, { method: "POST", headers: authHdrs() });
       if (!res.ok) throw new Error(`${res.status}`);
       setAlerts((prev) => prev.filter((a) => a.id !== id));
       showToast("Alert dismissed", "success");
@@ -172,16 +203,16 @@ function SystemContent() {
     }
   };
 
-  const toggleFlag = async (flag: string, current: boolean) => {
+  const toggleFlag = async (flagId: string, flagName: string, current: boolean) => {
     try {
-      const res = await fetch(`${API_URL}/api/feature-flags/${flag}`, {
+      const res = await fetch(`${API_URL}/api/flags/${flagId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: authHdrs(),
         body: JSON.stringify({ enabled: !current }),
       });
       if (!res.ok) throw new Error(`${res.status}`);
-      showToast(`${flag} ${!current ? "enabled" : "disabled"}`, "success");
-      loadStatus();
+      showToast(`${flagName} ${!current ? "enabled" : "disabled"}`, "success");
+      loadFlags();
     } catch (e) {
       showToast(`Toggle failed: ${e}`, "error");
     }
@@ -361,15 +392,19 @@ function SystemContent() {
       {tab === "flags" && (
         <div className="dash-card">
           <h2 className="section-title" style={{ fontSize: "0.875rem", marginBottom: "1rem" }}>Feature Flags</h2>
-          {Object.keys(features).length === 0 ? (
+          {loading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {[...Array(4)].map((_, i) => <div key={i} className="skeleton" style={{ height: "2.5rem" }} />)}
+            </div>
+          ) : dbFlags.length === 0 ? (
             <p style={{ fontSize: "0.8125rem", color: "var(--dash-text-dim)" }}>
-              No feature flags returned from API.
+              No feature flags found.
             </p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {Object.entries(features).map(([flag, enabled]) => (
+              {dbFlags.map((flag) => (
                 <div
-                  key={flag}
+                  key={flag.id}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -381,16 +416,17 @@ function SystemContent() {
                   }}
                 >
                   <div>
-                    <div className="mono" style={{ fontSize: "0.8125rem", color: "var(--dash-text)" }}>{flag}</div>
+                    <div className="mono" style={{ fontSize: "0.8125rem", color: "var(--dash-text)" }}>{flag.flag_name}</div>
+                    {flag.site_id && <div style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)", marginTop: "0.1rem" }}>{flag.site_id.slice(0, 8)}…</div>}
                   </div>
                   <button
-                    onClick={() => toggleFlag(flag, enabled)}
+                    onClick={() => toggleFlag(flag.id, flag.flag_name, flag.enabled)}
                     style={{
                       padding: "0.3rem 0.875rem",
-                      background: enabled ? "var(--dash-accent-dim)" : "var(--dash-border)",
-                      border: `1px solid ${enabled ? "var(--dash-accent)" : "var(--dash-border-hi)"}`,
+                      background: flag.enabled ? "var(--dash-accent-dim)" : "var(--dash-border)",
+                      border: `1px solid ${flag.enabled ? "var(--dash-accent)" : "var(--dash-border-hi)"}`,
                       borderRadius: "20px",
-                      color: enabled ? "var(--dash-accent)" : "var(--dash-text-dim)",
+                      color: flag.enabled ? "var(--dash-accent)" : "var(--dash-text-dim)",
                       fontSize: "0.75rem",
                       fontWeight: 600,
                       cursor: "pointer",
@@ -399,7 +435,7 @@ function SystemContent() {
                       textAlign: "center",
                     }}
                   >
-                    {enabled ? "ON" : "OFF"}
+                    {flag.enabled ? "ON" : "OFF"}
                   </button>
                 </div>
               ))}

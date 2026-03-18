@@ -252,4 +252,17 @@ async def update_flag(fid: str, body: dict, request: Request, _auth=Depends(requ
     return item
 
 
+# ─── Audit Log ───────────────────────────────────────────────────────────────
+
+@router.get("/api/audit")
+async def list_audit(limit: int = 100, _auth=Depends(require_auth)):
+    try:
+        return await db.query("audit_log", params={
+            "select": "*", "order": "created_at.desc", "limit": str(limit)
+        })
+    except Exception as e:
+        logger.error(f"list_audit error: {e}")
+        return []
+
+
 # Approvals endpoints live in execution.py (canonical location)

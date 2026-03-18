@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { Approval } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 type Tab = "pending" | "approved" | "rejected";
 
@@ -60,7 +61,13 @@ function ApprovalsContent() {
   const act = async (id: string, action: "approve" | "reject") => {
     setActing((s) => new Set(s).add(id));
     try {
-      const res = await fetch(`${API_URL}/api/approvals/${id}/${action}`, { method: "POST" });
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (API_KEY) headers["x-api-key"] = API_KEY;
+      const res = await fetch(`${API_URL}/api/approvals/${id}/resolve`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action }),
+      });
       if (!res.ok) throw new Error(`${res.status}`);
       showToast(`${action === "approve" ? "Approved" : "Rejected"} successfully`, "success");
       setItems((prev) => prev.filter((a) => a.id !== id));
