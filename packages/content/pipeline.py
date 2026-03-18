@@ -36,6 +36,17 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
     # Merge brand config into mission context
     brand = _build_brand_context(mission, site)
 
+    # Get client intelligence context
+    client_intelligence = ""
+    if site_id:
+        try:
+            from packages.intelligence import ClientIntelligence
+            intel = ClientIntelligence()
+            client_intelligence = await intel.get_content_context(site_id)
+        except Exception as e:
+            logger.warning(f"[{run_id}] Could not load client intelligence: {e}")
+    brand["client_intelligence"] = client_intelligence
+
     # Dedup check — skip if very similar keyword already exists for this site
     if site_id:
         dup = await _check_duplicate(keyword, site_id, exclude_id=asset_id)
@@ -232,11 +243,13 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
             core_topics=json.dumps(brand.get("core_topics", []), ensure_ascii=False),
             cta_config=json.dumps(brand.get("cta_config", {}), ensure_ascii=False),
             brand_tone_example=brand.get("brand_tone", "directo, honesto, útil"),
+            client_intelligence=brand.get("client_intelligence", ""),
         ) + research_context,
         system=prompts.BRIEF_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "experto en el tema"),
             brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
             brand_audience_summary=audience_summary or "personas interesadas en el tema",
+            client_intelligence=brand.get("client_intelligence", ""),
         ),
         model="haiku",
         json_mode=True,
@@ -277,11 +290,13 @@ async def _generate_draft(brief: dict, brand: dict, run_id: str) -> dict:
             cta_placement=brief.get("cta_placement", "natural"),
             first_paragraph_hook=brief.get("first_paragraph_hook", ""),
             target_word_count=brief.get("target_word_count", 1500),
+            client_intelligence=brand.get("client_intelligence", ""),
         ),
         system=prompts.DRAFT_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "experto en el tema"),
             brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
             partner_name=brand.get("partner_name", ""),
+            client_intelligence=brand.get("client_intelligence", ""),
         ),
         model="sonnet",
         max_tokens=8192,

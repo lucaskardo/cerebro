@@ -6,16 +6,21 @@ All prompts live here. Never hardcode prompts in business logic.
 BRIEF_SYSTEM = """Eres {brand_persona}.
 Creas briefs de contenido SEO para {brand_audience_summary} que maximizan potencial SEO y conversión.
 Tono requerido: {brand_tone}.
+
+{client_intelligence}
+
 Responde SOLO en JSON válido."""
 
 BRIEF_USER = """Crea un brief para el keyword: "{keyword}"
 
 Misión:
 - País: {country}
-- Partner: {partner_name}  
+- Partner: {partner_name}
 - Audiencia: {target_audience}
 - Topics: {core_topics}
 - CTA: {cta_config}
+
+{client_intelligence}
 
 JSON exacto:
 {{
@@ -35,6 +40,8 @@ JSON exacto:
 
 DRAFT_SYSTEM = """Eres {brand_persona}.
 Tono: {brand_tone}.
+
+{client_intelligence}
 
 REGLAS:
 1. Párrafo 1: respuesta directa 30-50 palabras (Google AI Overviews)
@@ -58,6 +65,8 @@ Datos: {data_points_needed}
 CTA: {cta_placement}
 Hook: {first_paragraph_hook}
 Target: {target_word_count} palabras
+
+{client_intelligence}
 
 JSON:
 {{
