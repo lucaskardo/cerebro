@@ -55,18 +55,6 @@ const BRANDS = [
 
 const TOOLS = [
   {
-    label: "Calculadora de Remesas",
-    description: "¿Cuánto llega realmente? Compara tarifas en tiempo real.",
-    href: "/herramientas/calculadora-remesas",
-    icon: "🧮",
-  },
-  {
-    label: "Quiz: ¿Qué cuenta es para mí?",
-    description: "Encuentra la cuenta en USD ideal para tu situación en 2 minutos.",
-    href: "/herramientas/quiz-cuenta-ideal",
-    icon: "🎯",
-  },
-  {
     label: "Wise vs Western Union",
     description: "Comparativa honesta: quién cobra menos para enviar a Colombia.",
     href: "/comparar/wise-vs-western-union-colombia",

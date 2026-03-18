@@ -58,19 +58,6 @@ export default async function ArticulosPage() {
         </div>
       )}
 
-      {/* Calculator CTA */}
-      <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-6 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <p className="font-bold text-slate-200 mb-1">Herramienta: Calculadora de Remesas</p>
-          <p className="text-sm text-slate-400">Calcula cuánto pierde tu familia al año en comisiones.</p>
-        </div>
-        <Link
-          href="/herramientas/calculadora-remesas"
-          className="shrink-0 bg-green-500 hover:bg-green-400 text-slate-900 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors"
-        >
-          Calcular →
-        </Link>
-      </div>
     </div>
   );
 }

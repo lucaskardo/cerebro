@@ -7,9 +7,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: BASE_URL, lastModified: new Date(), changeFrequency: "daily", priority: 1 },
     { url: `${BASE_URL}/articulos`, lastModified: new Date(), changeFrequency: "daily", priority: 0.9 },
-    { url: `${BASE_URL}/herramientas/calculadora-remesas`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.8 },
-    { url: `${BASE_URL}/herramientas/quiz-cuenta-ideal`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.8 },
-    { url: `${BASE_URL}/comparar/wise-vs-western-union-colombia`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.85 },
+{ url: `${BASE_URL}/comparar/wise-vs-western-union-colombia`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.85 },
     { url: `${BASE_URL}/guia/abrir-cuenta-dolares-paso-a-paso`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.85 },
     { url: `${BASE_URL}/marca/mudateapanama`, lastModified: new Date(), changeFrequency: "weekly" as const, priority: 0.8 },
     { url: `${BASE_URL}/marca/dolarizate`, lastModified: new Date(), changeFrequency: "weekly" as const, priority: 0.8 },
