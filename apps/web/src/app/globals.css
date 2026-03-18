@@ -130,8 +130,7 @@ body {
 
 /* ── Dashboard shell ────────────────────────────────────────────── */
 .dash-layout {
-  display: grid;
-  grid-template-columns: var(--dash-sidebar-w) 1fr;
+  display: block;
   min-height: 100vh;
   background: var(--dash-bg);
   font-family: 'DM Sans', system-ui, sans-serif;
