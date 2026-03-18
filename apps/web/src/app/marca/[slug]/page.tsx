@@ -143,8 +143,8 @@ const COLOR_MAP: Record<string, {
 };
 
 const TOOLS = [
-  { label: "Calculadora de remesas", href: "/calculadora-remesas", icon: "🧮" },
-  { label: "Quiz: ¿Qué cuenta es para mí?", href: "/quiz-cuenta-ideal", icon: "🎯" },
+  { label: "Calculadora de remesas", href: "/herramientas/calculadora-remesas", icon: "🧮" },
+  { label: "Quiz: ¿Qué cuenta es para mí?", href: "/herramientas/quiz-cuenta-ideal", icon: "🎯" },
   { label: "Comparar: Wise vs Western Union", href: "/comparar/wise-vs-western-union-colombia", icon: "⚖️" },
 ];
 
