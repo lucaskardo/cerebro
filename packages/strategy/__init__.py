@@ -39,12 +39,24 @@ async def plan_opportunities(goal_id: str, site_id: str = None) -> list[dict]:
         facts_params["site_id"] = f"eq.{site_id}"
     facts = await db.query("fact_daily_channel_performance", params=facts_params)
 
+    # Get client intelligence for strategy context
+    strategy_intel = ""
+    if site_id:
+        try:
+            from packages.intelligence import ClientIntelligence
+            intel = ClientIntelligence()
+            strategy_intel = await intel.get_strategy_context(site_id)
+        except Exception as e:
+            logger.warning(f"Could not load strategy intelligence: {e}")
+
     result = await complete(
         prompt=f"""Generate 3-5 concrete demand generation opportunities.
 
 GOAL: {goal['description']}
 TARGET METRIC: {goal['target_metric']} = {goal['target_value']}
 CURRENT VALUE: {goal.get('current_value', 0)}
+
+{strategy_intel}
 
 KNOWLEDGE (what has worked):
 {json.dumps(knowledge[:5], indent=2, ensure_ascii=False) if knowledge else "No knowledge yet — propose experiments."}
@@ -134,6 +146,17 @@ async def generate_strategies(goal_id: str) -> list[dict]:
         "limit": "10",
     })
 
+    # Get client intelligence for strategy context
+    strategy_intel = ""
+    goal_site_id = goal.get("site_id")
+    if goal_site_id:
+        try:
+            from packages.intelligence import ClientIntelligence
+            intel = ClientIntelligence()
+            strategy_intel = await intel.get_strategy_context(goal_site_id)
+        except Exception as e:
+            logger.warning(f"Could not load strategy intelligence: {e}")
+
     available_skills = list_skills()
 
     result = await complete(
@@ -148,6 +171,8 @@ MISSION CONTEXT:
 - Partner: {mission.get('partner_name')}
 - Audience: {json.dumps(mission.get('target_audience', {}), ensure_ascii=False)}
 - Topics: {json.dumps(mission.get('core_topics', []), ensure_ascii=False)}
+
+{strategy_intel}
 
 AVAILABLE SKILLS:
 {json.dumps(available_skills, indent=2)}
