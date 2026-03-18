@@ -91,6 +91,7 @@ async def capture_lead(lead: LeadCapture, bg: BackgroundTasks, request: Request)
             "utm_source": lead.utm_source,
             "utm_medium": lead.utm_medium,
             "utm_content": lead.utm_content,
+            "utm_campaign": lead.utm_campaign,
             "tema_interes": lead.tema_interes,
             "intent_score": lead.intent_score,
             "quiz_responses": quiz,

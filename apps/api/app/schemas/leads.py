@@ -10,6 +10,7 @@ class LeadCapture(BaseModel):
     utm_source: Optional[str] = None
     utm_medium: Optional[str] = None
     utm_content: Optional[str] = None
+    utm_campaign: Optional[str] = None
     tema_interes: Optional[str] = None
     intent_score: int = 0
     quiz_responses: dict = {}
