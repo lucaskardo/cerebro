@@ -210,7 +210,7 @@ function ContentPageContent() {
               </thead>
               <tbody>
                 {filtered.map((item) => {
-                  const title = truncate(item.title.replace("[GENERATING] ", ""), 55);
+                  const title = truncate((item.title ?? "").replace("[GENERATING] ", ""), 55);
                   const qualColor =
                     item.quality_score == null
                       ? "var(--dash-text-dim)"
@@ -235,7 +235,7 @@ function ContentPageContent() {
                         <span className="badge badge-gray" style={{ fontSize: "0.6875rem" }}>{brandName}</span>
                       </td>
                       <td>
-                        <span className="mono" style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>{item.keyword}</span>
+                        <span className="mono" style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>{item.keyword ?? "—"}</span>
                       </td>
                       <td>
                         <span className={BADGE_CLASS[item.status] ?? "badge badge-gray"}>{item.status}</span>
