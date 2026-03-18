@@ -39,3 +39,15 @@
 - Every new endpoint gets a smoke test in tests/test_smoke.py
 - Test both happy path and auth protection
 - Mock DB calls with AsyncMock (no real DB in tests)
+
+## Deployment Rules (Learned from Production)
+- **CORS before deploy**: Every new domain/site MUST be in CORS origins BEFORE deploying the site. Both `https://domain.com` and `https://www.domain.com`. Best: use dynamic CORS (read from `domain_sites` table at startup) so new sites auto-work without code changes.
+- **Auth whitelist**: Every new endpoint called by public sites MUST be in `PUBLIC_ROUTES` or `PUBLIC_GET_PREFIXES` in `middleware/auth.py` before going live.
+- **Dashboard pages**: MUST be `"use client"` with `useEffect` — never SSR fetch to the API.
+- **No 500s**: Every API endpoint MUST have `try/except` returning empty data — never propagate 500s.
+- **crypto.randomUUID fallback**: Not available in all browsers — always use a fallback (e.g. `Math.random().toString(36)`).
+- **Vercel env vars**: When deploying a new site project, ALWAYS set `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SITE_ID` in Vercel env vars before the first deploy.
+- **Auth changes**: After any auth middleware change, verify public endpoints (lead capture, tracking, content by slug) still work without auth.
+- **CORS middleware order**: MUST be the FIRST middleware added so CORS headers are sent even on 500 errors.
+- **Separate Vercel projects**: Every site in `apps/sites/` deploys as a SEPARATE Vercel project with Root Directory set to its folder.
+- **Pre-deploy check**: Run `make check` (or `python scripts/check_deploy.py`) before every deploy.

@@ -1,7 +1,10 @@
-.PHONY: test deploy-web health status lint endpoints tables loc
+.PHONY: test check deploy-web health status lint endpoints tables loc
 
 test:
 	pytest tests/ -v
+
+check:
+	python scripts/check_deploy.py
 
 deploy-web:
 	cd apps/web && npx vercel --prod --yes

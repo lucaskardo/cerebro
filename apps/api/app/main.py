@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp
 from fastapi.openapi.utils import get_openapi
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -23,6 +24,39 @@ from apps.api.app.middleware.rate_limit import RateLimitMiddleware
 
 logger = get_logger("api")
 
+# Mutable set populated from domain_sites at startup — checked by DynamicCORSMiddleware
+_dynamic_origins: set[str] = set()
+
+
+class DynamicCORSMiddleware(CORSMiddleware):
+    """CORSMiddleware that also allows origins loaded from DB at startup."""
+    def __init__(self, app: ASGIApp, **kwargs):
+        super().__init__(app, **kwargs)
+
+    def is_allowed_origin(self, origin: str) -> bool:
+        if origin in _dynamic_origins:
+            return True
+        return super().is_allowed_origin(origin)
+
+
+async def _load_cors_origins_from_db() -> None:
+    """Query domain_sites and populate _dynamic_origins with all known domains."""
+    try:
+        from packages.core import db
+        rows = await db.select("domain_sites", filters={}, columns=["domain"])
+        added = []
+        for row in rows:
+            domain = (row.get("domain") or "").strip()
+            if not domain:
+                continue
+            _dynamic_origins.add(f"https://{domain}")
+            _dynamic_origins.add(f"https://www.{domain}")
+            added.append(domain)
+        if added:
+            logger.info(f"CORS: loaded {len(added)} domains from domain_sites: {added}")
+    except Exception as e:
+        logger.warning(f"CORS: could not load domains from DB (non-fatal): {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +64,10 @@ async def lifespan(app: FastAPI):
     logger.info(f"Budget: ${config.DAILY_BUDGET}/day | Domain: {config.PRIMARY_DOMAIN}")
     auth_status = "configured" if config.API_SECRET_KEY else "⚠ NOT SET"
     logger.info(f"Auth: {auth_status} | Flags: auto_publish={config.AUTO_PUBLISH}")
+
+    # Load CORS origins from domain_sites table
+    await _load_cors_origins_from_db()
+    logger.info(f"CORS dynamic origins: {sorted(_dynamic_origins)}")
 
     # Seed prompt versions to DB (idempotent)
     try:
@@ -110,18 +148,19 @@ The response header `X-API-Version: 1` is set on all responses.
 
 # ─── CORS ────────────────────────────────────────────────────────────────────
 _extra_origins = [o.strip() for o in config.ALLOWED_ORIGINS.split(",") if o.strip()]
+# Seed static/env-var origins into the dynamic set immediately so they're available
+# even if DB is unreachable at startup.
+_dynamic_origins.update([
+    "http://localhost:3000",
+    f"https://{config.PRIMARY_DOMAIN}",
+    "https://web-ten-woad-99.vercel.app",
+    "https://web-a1uf6mml9-lucaskardos-projects.vercel.app",
+    *_extra_origins,
+])
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        f"https://{config.PRIMARY_DOMAIN}",
-        "https://web-ten-woad-99.vercel.app",
-        "https://web-a1uf6mml9-lucaskardos-projects.vercel.app",
-        "https://colchonespanama.com",
-        "https://www.colchonespanama.com",
-        *_extra_origins,
-    ],
-    allow_origin_regex=r"https://(.*\.vercel\.app|.*\.colchonespanama\.com|colchonespanama\.com)",
+    DynamicCORSMiddleware,
+    allow_origins=[],          # static list intentionally empty — all origins via dynamic set + regex
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

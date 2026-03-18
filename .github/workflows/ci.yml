@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r apps/api/requirements.txt
 
+      - name: Pre-deploy checks
+        run: python scripts/check_deploy.py
+
       - name: Run smoke tests
         env:
           SUPABASE_URL: http://localhost:54321

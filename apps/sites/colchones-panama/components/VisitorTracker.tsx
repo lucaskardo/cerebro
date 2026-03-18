@@ -7,7 +7,7 @@ function getOrCreateFingerprint(): string {
   const key = "cp_vid";
   let id = localStorage.getItem(key);
   if (!id) {
-    id = crypto.randomUUID();
+    id = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
     localStorage.setItem(key, id);
     // Also set cookie for server-side use
     document.cookie = `cp_vid=${id}; max-age=${60 * 60 * 24 * 365}; path=/; SameSite=Lax`;
