@@ -156,8 +156,8 @@ async def _call_anthropic(prompt, system, model_id, max_tokens, temperature,
     data = resp.json()
     text = "".join(b["text"] for b in data.get("content", []) if b.get("type") == "text")
     usage = data.get("usage", {})
-    return _build_result(text, model_id, usage.get("input_tokens", 0),
-                         usage.get("output_tokens", 0), json_mode, pipeline_step, run_id)
+    return await _build_result(text, model_id, usage.get("input_tokens", 0),
+                               usage.get("output_tokens", 0), json_mode, pipeline_step, run_id)
 
 
 # ── OpenAI ────────────────────────────────────────────────────────────────────
@@ -199,8 +199,8 @@ async def _call_openai(prompt, system, model_id, max_tokens, temperature,
     data = resp.json()
     text = data["choices"][0]["message"]["content"]
     usage = data.get("usage", {})
-    return _build_result(text, model_id, usage.get("prompt_tokens", 0),
-                         usage.get("completion_tokens", 0), json_mode, pipeline_step, run_id)
+    return await _build_result(text, model_id, usage.get("prompt_tokens", 0),
+                               usage.get("completion_tokens", 0), json_mode, pipeline_step, run_id)
 
 
 # ── DeepSeek ──────────────────────────────────────────────────────────────────
@@ -242,8 +242,8 @@ async def _call_deepseek(prompt, system, model_id, max_tokens, temperature,
     data = resp.json()
     text = data["choices"][0]["message"]["content"]
     usage = data.get("usage", {})
-    return _build_result(text, model_id, usage.get("prompt_tokens", 0),
-                         usage.get("completion_tokens", 0), json_mode, pipeline_step, run_id)
+    return await _build_result(text, model_id, usage.get("prompt_tokens", 0),
+                               usage.get("completion_tokens", 0), json_mode, pipeline_step, run_id)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
