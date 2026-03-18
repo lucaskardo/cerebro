@@ -1,31 +1,10 @@
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.API_URL ||
-  "http://localhost:8000";
-const KEY = process.env.API_SECRET_KEY || "";
+"use client";
 
-async function fetchAuth<T>(path: string): Promise<T | null> {
-  try {
-    const res = await fetch(`${API_URL}${path}`, {
-      headers: { "x-api-key": KEY },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return res.json() as Promise<T>;
-  } catch {
-    return null;
-  }
-}
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { api } from "@/lib/api";
 
-async function fetchPublic<T>(path: string): Promise<T | null> {
-  try {
-    const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
-    if (!res.ok) return null;
-    return res.json() as Promise<T>;
-  } catch {
-    return null;
-  }
-}
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface CycleRun {
   id: string;
@@ -46,9 +25,6 @@ interface KnowledgeInsight {
   insight: string;
   confidence: number | string;
   evidence?: Record<string, unknown>;
-  metric_name?: string | null;
-  metric_value?: number | null;
-  sample_size?: number | null;
   created_at: string;
 }
 
@@ -66,32 +42,30 @@ interface LoopStatus {
 interface BusinessHealthExtended {
   leads_today?: number;
   leads_this_week?: number;
-  knowledge_entries_this_week?: number;
   last_cycle_at?: string | null;
   last_cycle_status?: string | null;
   [key: string]: unknown;
 }
 
-const CYCLE_STATUS_STYLE: Record<string, string> = {
-  completed: "text-green-400 bg-green-400/10 border-green-400/30",
-  running:   "text-blue-400 bg-blue-400/10 border-blue-400/30",
-  paused:    "text-amber-400 bg-amber-400/10 border-amber-400/30",
-  failed:    "text-red-400 bg-red-400/10 border-red-400/30",
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+const CYCLE_STATUS_BADGE: Record<string, string> = {
+  completed: "badge badge-green",
+  running:   "badge badge-blue",
+  paused:    "badge badge-yellow",
+  failed:    "badge badge-red",
 };
 
 const CATEGORY_BADGE: Record<string, string> = {
-  content:    "text-blue-400 bg-blue-400/10 border-blue-400/30",
-  channel:    "text-green-400 bg-green-400/10 border-green-400/30",
-  audience:   "text-amber-400 bg-amber-400/10 border-amber-400/30",
-  conversion: "text-green-400 bg-green-400/10 border-green-400/30",
+  content:    "badge badge-blue",
+  channel:    "badge badge-green",
+  audience:   "badge badge-yellow",
+  conversion: "badge badge-green",
 };
 
 function parseConfidence(raw: number | string | undefined): number {
   if (raw === undefined || raw === null) return 0;
-  if (typeof raw === "number") {
-    // If stored as 0–1 float, scale to 0–100
-    return raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
-  }
+  if (typeof raw === "number") return raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
   const n = parseFloat(String(raw));
   return isNaN(n) ? 0 : n <= 1 ? Math.round(n * 100) : Math.round(n);
 }
@@ -106,225 +80,154 @@ function formatDuration(start: string, end: string | null): string {
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("es-CO", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  return new Date(iso).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
 }
 
-export default async function IntelligenceDashboardPage() {
-  const [health, insights, history, loopStatus] = await Promise.allSettled([
-    fetchPublic<BusinessHealthExtended>("/api/health/business"),
-    fetchAuth<KnowledgeInsight[]>("/api/knowledge/insights?limit=15"),
-    fetchAuth<CycleRun[]>("/api/loop/history?limit=20"),
-    fetchPublic<LoopStatus>("/api/loop/status"),
-  ]);
+// ─── Sub-component ─────────────────────────────────────────────────────────────
 
-  const h: BusinessHealthExtended | null =
-    health.status === "fulfilled" ? health.value : null;
-
-  const knowledgeRaw: KnowledgeInsight[] =
-    insights.status === "fulfilled" && Array.isArray(insights.value)
-      ? insights.value
-      : [];
-
-  const knowledge = [...knowledgeRaw].sort(
-    (a, b) => parseConfidence(b.confidence) - parseConfidence(a.confidence)
+function Stat({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
+  return (
+    <div className="dash-card">
+      <div className="stat-value" style={accent ? undefined : undefined}>{value}</div>
+      <div className="stat-label">{label}</div>
+    </div>
   );
+}
 
-  const cycles: CycleRun[] =
-    history.status === "fulfilled" && Array.isArray(history.value)
-      ? history.value
-      : [];
+// ─── Page ──────────────────────────────────────────────────────────────────────
 
-  const loop: LoopStatus | null =
-    loopStatus.status === "fulfilled" ? loopStatus.value : null;
+function IntelligenceContent() {
+  const searchParams = useSearchParams();
+  // siteId available for future filtering
+  void searchParams.get("site_id");
+
+  const [health, setHealth] = useState<BusinessHealthExtended | null>(null);
+  const [knowledge, setKnowledge] = useState<KnowledgeInsight[]>([]);
+  const [cycles, setCycles] = useState<CycleRun[]>([]);
+  const [loop, setLoop] = useState<LoopStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.allSettled([
+      api.businessHealth(),
+      api.knowledgeInsights(15),
+      api.cycleHistory(20),
+      api.loopStatus(),
+    ]).then(([hRes, kRes, cRes, lRes]) => {
+      if (hRes.status === "fulfilled") setHealth(hRes.value as unknown as BusinessHealthExtended);
+      if (kRes.status === "fulfilled" && Array.isArray(kRes.value)) {
+        const sorted = [...(kRes.value as unknown as KnowledgeInsight[])].sort(
+          (a, b) => parseConfidence(b.confidence) - parseConfidence(a.confidence)
+        );
+        setKnowledge(sorted);
+      }
+      if (cRes.status === "fulfilled" && Array.isArray(cRes.value)) {
+        setCycles(cRes.value as unknown as CycleRun[]);
+      }
+      if (lRes.status === "fulfilled") setLoop(lRes.value as unknown as LoopStatus);
+      setLoading(false);
+    });
+  }, []);
 
   const schedulerEnabled = loop?.scheduler_enabled ?? false;
   const lastCycle = loop?.last_cycle ?? null;
-
-  const topConfidence =
-    knowledge.length > 0 ? parseConfidence(knowledge[0].confidence) : null;
-
-  const experimentsEvaluated = cycles.reduce(
-    (sum, c) => sum + (c.experiments_created ?? 0),
-    0
-  );
+  const topConfidence = knowledge.length > 0 ? parseConfidence(knowledge[0].confidence) : null;
+  const experimentsEvaluated = cycles.reduce((sum, c) => sum + (c.experiments_created ?? 0), 0);
 
   return (
-    <div className="space-y-10">
+    <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-100">Intelligence</h1>
-        <p className="text-sm text-slate-500 mt-1">
+        <h1 className="page-title">Intelligence</h1>
+        <p style={{ fontSize: "0.8125rem", color: "var(--dash-text-dim)", marginTop: "0.25rem" }}>
           Sistema de aprendizaje continuo
         </p>
       </div>
 
       {/* Loop status banner */}
-      <div
-        style={{
-          padding: "0.875rem 1.25rem",
-          borderRadius: "0.875rem",
-          border: "1px solid",
-          borderColor: schedulerEnabled
-            ? "rgba(0, 217, 126, 0.3)"
-            : "var(--dash-border)",
-          background: schedulerEnabled
-            ? "rgba(0, 217, 126, 0.06)"
-            : "rgba(100, 116, 139, 0.08)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap" as const,
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <span
-            style={{
-              width: "0.625rem",
-              height: "0.625rem",
-              borderRadius: "50%",
-              background: schedulerEnabled ? "var(--dash-accent)" : "#64748b",
-              flexShrink: 0,
-              display: "inline-block",
-            }}
-          />
-          <span
-            style={{
-              fontWeight: 600,
-              fontSize: "0.875rem",
-              color: schedulerEnabled ? "var(--dash-accent)" : "#64748b",
-            }}
-          >
-            {schedulerEnabled ? "Loop activo" : "Loop pausado"}
+      <div style={{
+        padding: "0.875rem 1.25rem",
+        borderRadius: "0.875rem",
+        border: "1px solid",
+        borderColor: schedulerEnabled ? "rgba(0, 217, 126, 0.3)" : "var(--dash-border)",
+        background: schedulerEnabled ? "rgba(0, 217, 126, 0.06)" : "rgba(100, 116, 139, 0.08)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "1rem",
+        flexWrap: "wrap" as const,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <span style={{
+            width: "0.625rem",
+            height: "0.625rem",
+            borderRadius: "50%",
+            background: schedulerEnabled ? "var(--dash-accent)" : "#64748b",
+            display: "inline-block",
+            flexShrink: 0,
+          }} />
+          <span style={{ fontWeight: 600, fontSize: "0.875rem", color: schedulerEnabled ? "var(--dash-accent)" : "#64748b" }}>
+            {loading ? "…" : schedulerEnabled ? "Loop activo" : "Loop pausado"}
           </span>
         </div>
         {lastCycle && (
-          <div className="flex items-center gap-4 text-xs text-slate-500">
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>
             {lastCycle.status && (
-              <span
-                className={`px-2 py-0.5 rounded border text-xs ${
-                  CYCLE_STATUS_STYLE[lastCycle.status] ??
-                  "text-slate-400 border-slate-700"
-                }`}
-              >
-                {lastCycle.status}
-              </span>
+              <span className={CYCLE_STATUS_BADGE[lastCycle.status] ?? "badge badge-gray"}>{lastCycle.status}</span>
             )}
-            {lastCycle.completed_at && (
-              <span>Último ciclo: {fmtDate(lastCycle.completed_at)}</span>
-            )}
+            {lastCycle.completed_at && <span>Último ciclo: {fmtDate(lastCycle.completed_at)}</span>}
           </div>
         )}
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Stat label="Knowledge entries" value={knowledge.length} />
-        <Stat
-          label="Último ciclo"
-          value={
-            h?.last_cycle_at
-              ? fmtDate(h.last_cycle_at as string)
-              : lastCycle?.completed_at
-              ? fmtDate(lastCycle.completed_at)
-              : "—"
-          }
-        />
-        <Stat label="Experimentos evaluados" value={experimentsEvaluated} />
-        <Stat
-          label="Top confidence"
-          value={topConfidence !== null ? `${topConfidence}%` : "—"}
-          accent={topConfidence !== null && topConfidence >= 70}
-        />
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.875rem" }}>
+        <Stat label="Knowledge entries" value={loading ? "…" : knowledge.length} />
+        <Stat label="Último ciclo" value={loading ? "…" : health?.last_cycle_at ? fmtDate(health.last_cycle_at as string) : lastCycle?.completed_at ? fmtDate(lastCycle.completed_at) : "—"} />
+        <Stat label="Experimentos evaluados" value={loading ? "…" : experimentsEvaluated} />
+        <Stat label="Top confidence" value={loading ? "…" : topConfidence !== null ? `${topConfidence}%` : "—"} accent={topConfidence !== null && topConfidence >= 70} />
       </div>
 
-      {/* Knowledge Insights */}
-      <section>
-        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-4">
-          Lo que el sistema ha aprendido
-        </h2>
-
-        {knowledge.length === 0 ? (
-          <div className="text-center py-10 text-slate-600">
-            <p className="text-sm">Sin insights todavía</p>
-            <p className="text-xs mt-1 font-mono text-slate-700">
+      {/* Knowledge insights */}
+      <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <h2 className="section-title">Lo que el sistema ha aprendido</h2>
+        {loading ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.875rem" }}>
+            {[...Array(4)].map((_, i) => <div key={i} className="dash-card skeleton" style={{ height: "7rem" }} />)}
+          </div>
+        ) : knowledge.length === 0 ? (
+          <div className="dash-card" style={{ textAlign: "center", padding: "3rem 1.5rem", color: "var(--dash-text-dim)" }}>
+            <p style={{ fontSize: "0.875rem" }}>Sin insights todavía</p>
+            <p className="mono" style={{ fontSize: "0.75rem", marginTop: "0.25rem", color: "var(--dash-muted)" }}>
               Los insights aparecen tras evaluar experimentos
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.875rem" }}>
             {knowledge.map((k) => {
               const conf = parseConfidence(k.confidence);
-              const evidenceCount = k.evidence
-                ? Object.keys(k.evidence).length
-                : 0;
+              const evidenceCount = k.evidence ? Object.keys(k.evidence).length : 0;
               return (
-                <div
-                  key={k.id}
-                  className="bg-slate-800/40 border border-slate-700/30 rounded-xl p-4 flex flex-col gap-2"
-                >
-                  {/* Category badge + confidence % */}
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded border font-medium ${
-                        CATEGORY_BADGE[k.category] ??
-                        "text-slate-400 bg-slate-400/10 border-slate-400/30"
-                      }`}
-                    >
-                      {k.category}
-                    </span>
-                    <span
-                      className={`text-xs font-mono font-semibold ${
-                        conf >= 70
-                          ? "text-green-400"
-                          : conf >= 40
-                          ? "text-amber-400"
-                          : "text-slate-500"
-                      }`}
-                    >
+                <div key={k.id} className="dash-card" style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span className={CATEGORY_BADGE[k.category] ?? "badge badge-gray"}>{k.category}</span>
+                    <span className="mono" style={{ fontSize: "0.75rem", fontWeight: 600, color: conf >= 70 ? "var(--dash-accent)" : conf >= 40 ? "#f59e0b" : "var(--dash-text-dim)" }}>
                       {conf}%
                     </span>
                   </div>
-
-                  {/* Insight text */}
-                  <p className="text-sm text-slate-300 leading-snug">
-                    {k.insight}
-                  </p>
-
-                  {/* Evidence count */}
+                  <p style={{ fontSize: "0.8125rem", color: "var(--dash-text)", lineHeight: 1.5, margin: 0 }}>{k.insight}</p>
                   {evidenceCount > 0 && (
-                    <p className="text-xs text-slate-600">
-                      {evidenceCount} evidencia{evidenceCount !== 1 ? "s" : ""}
-                    </p>
+                    <p style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)" }}>{evidenceCount} evidencia{evidenceCount !== 1 ? "s" : ""}</p>
                   )}
-
-                  {/* Confidence bar */}
-                  <div
-                    style={{
-                      height: "3px",
-                      borderRadius: "2px",
-                      background: "var(--dash-border)",
-                      overflow: "hidden",
-                      marginTop: "0.25rem",
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${Math.min(conf, 100)}%`,
-                        borderRadius: "2px",
-                        background:
-                          conf >= 70
-                            ? "var(--dash-accent)"
-                            : conf >= 40
-                            ? "#f59e0b"
-                            : "#64748b",
-                        transition: "width 0.4s ease",
-                      }}
-                    />
+                  <div style={{ height: 3, borderRadius: 2, background: "var(--dash-border)", overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${Math.min(conf, 100)}%`,
+                      borderRadius: 2,
+                      background: conf >= 70 ? "var(--dash-accent)" : conf >= 40 ? "#f59e0b" : "#64748b",
+                      transition: "width 0.4s ease",
+                    }} />
                   </div>
                 </div>
               );
@@ -333,114 +236,57 @@ export default async function IntelligenceDashboardPage() {
         )}
       </section>
 
-      {/* Cycle History */}
-      <section>
-        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-4">
+      {/* Cycle history */}
+      <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <h2 className="section-title">
           Ciclos recientes
-          {cycles.length > 0 && (
-            <span className="text-slate-600 normal-case font-normal ml-2">
-              · {cycles.length} ciclos
-            </span>
+          {!loading && cycles.length > 0 && (
+            <span style={{ fontSize: "0.75rem", fontWeight: 400, color: "var(--dash-text-dim)", marginLeft: "0.5rem" }}>· {cycles.length} ciclos</span>
           )}
         </h2>
-
-        {cycles.length === 0 ? (
-          <div className="text-center py-10 text-slate-600">
-            <p className="text-sm">Sin ciclos todavía</p>
-            <p className="text-xs mt-1 font-mono text-slate-700">
+        {loading ? (
+          <div className="dash-card" style={{ display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1.25rem" }}>
+            {[...Array(4)].map((_, i) => <div key={i} className="skeleton" style={{ height: "2.5rem" }} />)}
+          </div>
+        ) : cycles.length === 0 ? (
+          <div className="dash-card" style={{ textAlign: "center", padding: "3rem 1.5rem", color: "var(--dash-text-dim)" }}>
+            <p style={{ fontSize: "0.875rem" }}>Sin ciclos todavía</p>
+            <p className="mono" style={{ fontSize: "0.75rem", marginTop: "0.25rem", color: "var(--dash-muted)" }}>
               POST /api/loop/run para iniciar el primer ciclo
             </p>
           </div>
         ) : (
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+          <div className="dash-card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table className="dash-table">
                 <thead>
-                  <tr className="border-b border-slate-700/50">
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">
-                      Iniciado
-                    </th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">
-                      Estado
-                    </th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">
-                      Opps
-                    </th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">
-                      Experiments
-                    </th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">
-                      Auto-run
-                    </th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">
-                      En cola
-                    </th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium hidden lg:table-cell">
-                      Kill reason
-                    </th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">
-                      Duración
-                    </th>
+                  <tr>
+                    <th>Iniciado</th><th>Estado</th>
+                    <th style={{ textAlign: "right" }}>Opps</th>
+                    <th style={{ textAlign: "right" }}>Experiments</th>
+                    <th style={{ textAlign: "right" }}>Auto-run</th>
+                    <th style={{ textAlign: "right" }}>En cola</th>
+                    <th>Kill reason</th>
+                    <th style={{ textAlign: "right" }}>Duración</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cycles.map((c) => (
-                    <tr
-                      key={c.id}
-                      className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"
-                    >
-                      {/* Started at */}
-                      <td className="px-4 py-3 text-slate-500">
-                        {fmtDate(c.created_at)}
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3">
-                        <span
-                          className={`px-2 py-0.5 rounded border ${
-                            CYCLE_STATUS_STYLE[c.status] ??
-                            "text-slate-400 border-slate-700"
-                          }`}
-                        >
-                          {c.status}
-                        </span>
-                      </td>
-
-                      {/* Opps generated */}
-                      <td className="px-4 py-3 text-right font-mono text-slate-300">
-                        {c.opportunities_generated}
-                      </td>
-
-                      {/* Experiments created */}
-                      <td className="px-4 py-3 text-right font-mono text-slate-300">
-                        {c.experiments_created}
-                      </td>
-
-                      {/* Auto-run */}
-                      <td className="px-4 py-3 text-right font-mono text-green-400">
-                        {c.tasks_auto_run}
-                      </td>
-
-                      {/* Queued for approval */}
-                      <td className="px-4 py-3 text-right font-mono text-amber-400">
-                        {c.tasks_queued_approval}
-                      </td>
-
-                      {/* Kill reason */}
-                      <td className="px-4 py-3 hidden lg:table-cell max-w-[200px]">
+                    <tr key={c.id}>
+                      <td><span style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>{fmtDate(c.created_at)}</span></td>
+                      <td><span className={CYCLE_STATUS_BADGE[c.status] ?? "badge badge-gray"}>{c.status}</span></td>
+                      <td style={{ textAlign: "right" }}><span className="mono">{c.opportunities_generated}</span></td>
+                      <td style={{ textAlign: "right" }}><span className="mono">{c.experiments_created}</span></td>
+                      <td style={{ textAlign: "right" }}><span className="mono" style={{ color: "var(--dash-accent)" }}>{c.tasks_auto_run}</span></td>
+                      <td style={{ textAlign: "right" }}><span className="mono" style={{ color: "#f59e0b" }}>{c.tasks_queued_approval}</span></td>
+                      <td style={{ maxWidth: 200 }}>
                         {c.kill_reason ? (
-                          <span className="text-red-400 truncate block">
-                            {c.kill_reason}
-                          </span>
+                          <span style={{ color: "var(--dash-danger)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{c.kill_reason}</span>
                         ) : (
-                          <span className="text-slate-700">—</span>
+                          <span style={{ color: "var(--dash-text-dim)" }}>—</span>
                         )}
                       </td>
-
-                      {/* Duration */}
-                      <td className="px-4 py-3 text-right font-mono text-slate-500">
-                        {formatDuration(c.created_at, c.completed_at)}
-                      </td>
+                      <td style={{ textAlign: "right" }}><span className="mono" style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>{formatDuration(c.created_at, c.completed_at)}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -453,25 +299,10 @@ export default async function IntelligenceDashboardPage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  accent?: boolean;
-}) {
+export default function IntelligenceDashboardPage() {
   return (
-    <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-      <div className="text-xs text-slate-500 mb-1">{label}</div>
-      <div
-        className={`text-xl font-bold font-mono leading-tight ${
-          accent ? "text-green-400" : "text-slate-100"
-        }`}
-      >
-        {value}
-      </div>
-    </div>
+    <Suspense fallback={<div style={{ padding: "2rem", color: "var(--dash-text-dim)" }}>Loading…</div>}>
+      <IntelligenceContent />
+    </Suspense>
   );
 }

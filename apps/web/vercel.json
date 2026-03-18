@@ -5,6 +5,7 @@
   "installCommand": "npm install",
   "env": {
     "NEXT_PUBLIC_API_URL": "https://web-production-c6ed5.up.railway.app",
+    "NEXT_PUBLIC_API_KEY": "",
     "PRIMARY_DOMAIN": "dolarafuera.co"
   }
 }

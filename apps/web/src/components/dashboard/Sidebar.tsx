@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import type { Site } from "@/lib/api";
+import { api } from "@/lib/api";
 
 const NAV = [
   { href: "/dashboard",              label: "Health",        icon: "◈" },
@@ -20,32 +21,29 @@ const NAV = [
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-interface Props {
-  sites: Site[];
-}
-
-export default function Sidebar({ sites }: Props) {
+export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const currentSiteId = searchParams.get("site_id") || "";
+  const [sites, setSites] = useState<Site[]>([]);
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [brandOpen, setBrandOpen] = useState(false);
 
   const currentSite = sites.find((s) => s.id === currentSiteId);
 
+  // Fetch sites once on mount
+  useEffect(() => {
+    api.sites().then(setSites).catch(() => setSites([]));
+  }, []);
+
   // Fetch pending approvals count
   const fetchPending = useCallback(async () => {
     try {
-      const q = new URLSearchParams({ status: "pending" });
-      if (currentSiteId) q.set("site_id", currentSiteId);
-      const res = await fetch(`${API_URL}/api/approvals?${q}`, { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        setPendingCount(Array.isArray(data) ? data.length : 0);
-      }
+      const data = await api.approvals("pending", currentSiteId || undefined);
+      setPendingCount(Array.isArray(data) ? data.length : 0);
     } catch {
       setPendingCount(null);
     }

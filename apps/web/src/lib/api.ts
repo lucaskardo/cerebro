@@ -5,8 +5,12 @@ const API_URL =
   process.env.API_URL ||
   "http://localhost:8000";
 
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
+
 async function fetchAPI<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (API_KEY) headers["x-api-key"] = API_KEY;
+  const res = await fetch(`${API_URL}${path}`, { headers, cache: "no-store" });
   if (!res.ok) throw new Error(`API ${res.status}: ${path}`);
   return res.json();
 }
@@ -319,7 +323,7 @@ export const api = {
     fetchAPI<PersonaIdentity[]>(`/api/personas/${personaId}/identities`),
   personaIdentitiesRevealed: (personaId: string, masterKey: string) =>
     fetch(`${API_URL}/api/personas/${personaId}/identities?reveal=true`, {
-      headers: { "x-master-key": masterKey },
+      headers: { ...authHeaders(), "x-master-key": masterKey },
       cache: "no-store",
     }).then((r) => {
       if (!r.ok) throw new Error(`Reveal failed: ${r.status}`);
@@ -367,14 +371,20 @@ export const api = {
   },
 };
 
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (API_KEY) h["x-api-key"] = API_KEY;
+  return { ...h, ...extra };
+}
+
 export async function approveStrategy(id: string): Promise<Strategy> {
-  const res = await fetch(`${API_URL}/api/strategies/${id}/approve`, { method: "POST" });
+  const res = await fetch(`${API_URL}/api/strategies/${id}/approve`, { method: "POST", headers: authHeaders() });
   if (!res.ok) throw new Error(`Approve failed: ${res.status}`);
   return res.json();
 }
 
 export async function generateStrategies(goalId: string): Promise<Strategy[]> {
-  const res = await fetch(`${API_URL}/api/strategies/generate?goal_id=${goalId}`, { method: "POST" });
+  const res = await fetch(`${API_URL}/api/strategies/generate?goal_id=${goalId}`, { method: "POST", headers: authHeaders() });
   if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
   return res.json();
 }
@@ -382,7 +392,7 @@ export async function generateStrategies(goalId: string): Promise<Strategy[]> {
 export async function createGoal(data: { description: string; target_metric: string; target_value: number }): Promise<Goal> {
   const res = await fetch(`${API_URL}/api/goals`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`Create goal failed: ${res.status}`);
@@ -409,7 +419,7 @@ export async function captureLead(data: {
 export async function updatePersona(id: string, data: Partial<Persona>): Promise<Persona> {
   const res = await fetch(`${API_URL}/api/personas/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`Update persona failed: ${res.status}`);
