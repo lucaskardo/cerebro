@@ -194,6 +194,18 @@ export interface MarketResearch {
   created_at: string;
 }
 
+export interface AttributionChain {
+  asset_id: string;
+  asset_title: string;
+  asset_keyword: string;
+  leads_generated: number;
+  leads_qualified: number;
+  leads_accepted: number;
+  revenue: number;
+  top_cta_variant: string | null;
+  top_utm_source: string | null;
+}
+
 export interface BusinessHealth {
   leads_today: number;
   leads_this_week: number;
@@ -350,6 +362,8 @@ export const api = {
     fetchAPI<LeadsByCta[]>(`/api/reports/leads-by-cta?days=${days}${siteId ? `&site_id=${siteId}` : ""}`),
   revenueByAsset: (siteId?: string) =>
     fetchAPI<RevenueByAsset[]>(`/api/reports/revenue-by-asset${siteId ? `?site_id=${siteId}` : ""}`),
+  attributionChain: (days = 30, siteId?: string) =>
+    fetchAPI<AttributionChain[]>(`/api/reports/attribution-chain?days=${days}${siteId ? `&site_id=${siteId}` : ""}`),
   businessHealth: () => fetchAPI<BusinessHealth>("/api/health/business"),
   sites: () => fetchAPI<Site[]>("/api/sites"),
   relatedContent: (limit = 5) => fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),

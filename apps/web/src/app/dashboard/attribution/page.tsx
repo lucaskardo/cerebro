@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import type { Funnel, LeadsByAsset, LeadsByBrand } from "@/lib/api";
+import type { Funnel, LeadsByAsset, LeadsByBrand, AttributionChain } from "@/lib/api";
 import { api } from "@/lib/api";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,6 +45,7 @@ function AttributionContent() {
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [byAsset, setByAsset] = useState<LeadsByAsset[] | null>(null);
   const [byBrand, setByBrand] = useState<LeadsByBrand[] | null>(null);
+  const [chain, setChain] = useState<AttributionChain[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,10 +54,12 @@ function AttributionContent() {
       api.funnelNew(days, siteId || undefined),
       api.leadsByAsset(days, siteId || undefined),
       api.leadsByBrand(days),
-    ]).then(([fRes, aRes, bRes]) => {
+      api.attributionChain(days, siteId || undefined),
+    ]).then(([fRes, aRes, bRes, cRes]) => {
       if (fRes.status === "fulfilled") setFunnel(fRes.value);
       if (aRes.status === "fulfilled") setByAsset(aRes.value);
       if (bRes.status === "fulfilled") setByBrand(bRes.value);
+      if (cRes.status === "fulfilled") setChain(cRes.value);
       setLoading(false);
     });
   }, [siteId]);
@@ -233,6 +236,74 @@ function AttributionContent() {
             )}
         </section>
       </div>
+
+      {/* Attribution Chain */}
+      <section style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <h2 className="section-title">Revenue by Asset</h2>
+        {loading ? (
+          <div className="dash-card skeleton" style={{ height: "8rem" }} />
+        ) : !chain?.length ? (
+          <NoData />
+        ) : (
+          <div className="dash-card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table className="dash-table">
+                <thead>
+                  <tr>
+                    <th>Article</th>
+                    <th style={{ textAlign: "right" }}>Leads</th>
+                    <th style={{ textAlign: "right" }}>Qualified</th>
+                    <th style={{ textAlign: "right" }}>Accepted</th>
+                    <th style={{ textAlign: "right" }}>Revenue</th>
+                    <th>Top CTA</th>
+                    <th>Top Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chain.slice(0, 15).map((row) => (
+                    <tr key={row.asset_id}>
+                      <td>
+                        <span style={{ fontSize: "0.8125rem", color: "var(--dash-text)", fontWeight: 500 }}>
+                          {trunc(row.asset_title, 45)}
+                        </span>
+                        {row.asset_keyword && (
+                          <span style={{ display: "block", fontSize: "0.6875rem", color: "var(--dash-text-dim)" }}>
+                            {row.asset_keyword}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className="mono">{row.leads_generated}</span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className="mono" style={{ color: "#f59e0b" }}>{row.leads_qualified}</span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className="mono" style={{ color: "var(--dash-accent)" }}>{row.leads_accepted}</span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className="mono" style={{ fontWeight: 600, color: row.revenue > 0 ? "var(--dash-accent)" : "var(--dash-text-dim)" }}>
+                          {row.revenue > 0 ? `$${row.revenue.toFixed(0)}` : "—"}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>
+                          {row.top_cta_variant || "—"}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>
+                          {row.top_utm_source || "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
