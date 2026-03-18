@@ -61,6 +61,7 @@ _OPENAPI_TAGS = [
     {"name": "Attribution", "description": "Funnel tracking: visitor → lead → conversion. UTM attribution reports."},
     {"name": "Personas",    "description": "Digital personas, platform identities, and social content schedule."},
     {"name": "Loop",        "description": "Continuous strategy loop: run cycles, view history, monitor status."},
+    {"name": "Intelligence", "description": "Client intelligence: market research, competitor analysis, profile management."},
 ]
 
 app = FastAPI(
@@ -161,7 +162,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
-from apps.api.app.routers import system, content, leads, strategy, personas, attribution, execution, loop
+from apps.api.app.routers import system, content, leads, strategy, personas, attribution, execution, loop, intelligence
 
 app.include_router(system.router)
 app.include_router(content.router)
@@ -171,6 +172,7 @@ app.include_router(personas.router)
 app.include_router(attribution.router)
 app.include_router(execution.router)
 app.include_router(loop.router)
+app.include_router(intelligence.router)
 
 
 if __name__ == "__main__":
