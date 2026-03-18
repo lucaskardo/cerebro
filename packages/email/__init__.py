@@ -24,7 +24,7 @@ async def send_email(
         logger.warning(f"RESEND_API_KEY not set — skipping email to {to}")
         return False
 
-    base_addr = from_email or from_addr or config.EMAIL_FROM or "noreply@dolarafuera.co"
+    base_addr = from_email or from_addr or config.EMAIL_FROM or ""
     if from_name:
         full_from = f"{from_name} <{base_addr}>"
     else:
@@ -51,10 +51,31 @@ async def send_email(
             return False
 
 
-async def send_welcome_email(email: str, nombre: str = None, tema: str = None) -> bool:
-    """Welcome email for new leads."""
+async def send_welcome_email(
+    email: str,
+    nombre: str = None,
+    tema: str = None,
+    brand_name: str = None,
+    author_name: str = None,
+    site_url: str = None,
+    intro_line: str = None,
+    tip_text: str = None,
+) -> bool:
+    """Welcome email for new leads. Fully parametrized — no hardcoded brand references."""
+    brand = brand_name or config.PRIMARY_DOMAIN or "CEREBRO"
+    author = author_name or brand
+    url = site_url or f"https://{config.PRIMARY_DOMAIN}" if config.PRIMARY_DOMAIN else "#"
     nombre_display = nombre or "amigo"
     tema_line = f"<p>Vi que te interesa <strong>{tema}</strong>. Tengo contenido específico para eso.</p>" if tema else ""
+    default_intro = f"Te escribo desde {brand}. En los próximos días te enviaré las guías más importantes."
+    body_line = intro_line or default_intro
+    tip_html = f"""
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin:24px 0;">
+      <p style="color:#22c55e;font-size:12px;font-weight:700;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">
+        💡 Mientras tanto
+      </p>
+      <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin:0;">{tip_text}</p>
+    </div>""" if tip_text else ""
 
     html = f"""
 <!DOCTYPE html>
@@ -62,59 +83,41 @@ async def send_welcome_email(email: str, nombre: str = None, tema: str = None) -
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bienvenido a Dólar Afuera</title>
+  <title>Bienvenido a {brand}</title>
 </head>
 <body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:560px;margin:0 auto;padding:40px 24px;">
 
-    <!-- Logo -->
     <div style="margin-bottom:32px;">
-      <span style="color:#22c55e;font-weight:700;font-size:18px;letter-spacing:2px;">⚡ DÓLAR AFUERA</span>
+      <span style="color:#22c55e;font-weight:700;font-size:18px;letter-spacing:2px;">⚡ {brand.upper()}</span>
     </div>
 
-    <!-- Headline -->
     <h1 style="color:#f1f5f9;font-size:24px;font-weight:700;line-height:1.3;margin:0 0 16px;">
       Hola {nombre_display}, bienvenido.
     </h1>
 
-    <!-- Body -->
     <p style="color:#94a3b8;font-size:16px;line-height:1.7;margin:0 0 16px;">
-      Soy Carlos Medina. Llevo más de 10 años ayudando a colombianos a manejar su plata afuera del sistema bancario tradicional colombiano.
+      {body_line}
     </p>
 
     {tema_line}
 
-    <p style="color:#94a3b8;font-size:16px;line-height:1.7;margin:0 0 24px;">
-      En los próximos días te voy a enviar las guías más importantes que necesitas saber para proteger tus ahorros y acceder al sistema financiero internacional desde Colombia.
-    </p>
+    {tip_html}
 
-    <!-- CTA -->
     <div style="margin:32px 0;">
-      <a href="https://dolarafuera.co"
+      <a href="{url}"
          style="display:inline-block;background:#22c55e;color:#0f172a;font-weight:700;font-size:15px;padding:14px 28px;border-radius:8px;text-decoration:none;">
         Ver las guías →
       </a>
     </div>
 
-    <!-- Tip box -->
-    <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin:24px 0;">
-      <p style="color:#22c55e;font-size:12px;font-weight:700;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;">
-        💡 Mientras tanto
-      </p>
-      <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin:0;">
-        El colombiano promedio pierde entre el <strong style="color:#f1f5f9;">5% y 8%</strong> del valor de sus remesas en comisiones y tasas de cambio.
-        Con las opciones correctas, eso baja a menos del <strong style="color:#22c55e;">1%</strong>.
-      </p>
-    </div>
-
-    <!-- Footer -->
     <div style="border-top:1px solid #1e293b;margin-top:40px;padding-top:24px;">
       <p style="color:#475569;font-size:13px;line-height:1.6;margin:0;">
-        Carlos Medina · Dólar Afuera<br>
-        <a href="https://dolarafuera.co" style="color:#22c55e;text-decoration:none;">dolarafuera.co</a>
+        {author} · {brand}<br>
+        <a href="{url}" style="color:#22c55e;text-decoration:none;">{url.replace("https://", "")}</a>
       </p>
       <p style="color:#334155;font-size:12px;margin:8px 0 0;">
-        Recibiste este email porque te registraste en dolarafuera.co.
+        Recibiste este email porque te registraste en {url.replace("https://", "")}.
       </p>
     </div>
 
@@ -124,7 +127,7 @@ async def send_welcome_email(email: str, nombre: str = None, tema: str = None) -
 """
     return await send_email(
         to=email,
-        subject="Bienvenido a Dólar Afuera 🇨🇴",
+        subject=f"Bienvenido a {brand}",
         html=html,
     )
 
@@ -136,12 +139,37 @@ async def send_calculator_results_email(
     metodo: str = "",
     perdida_anual: float = 0,
     ahorro_potencial: float = 0,
+    brand_name: str = None,
+    author_name: str = None,
+    site_url: str = None,
+    recommendations: list = None,
 ) -> bool:
-    """Email with full calculator results after lead capture."""
+    """Email with full calculator results after lead capture. Fully parametrized."""
+    brand = brand_name or config.PRIMARY_DOMAIN or "CEREBRO"
+    author = author_name or brand
+    url = site_url or (f"https://{config.PRIMARY_DOMAIN}" if config.PRIMARY_DOMAIN else "#")
     nombre_display = nombre or "amigo"
     monto_fmt = f"${monto_mensual:,.0f}"
     perdida_fmt = f"${perdida_anual:,.0f}"
     ahorro_fmt = f"${ahorro_potencial:,.0f}"
+
+    # Build recommendations rows from passed list or show empty state
+    recs_html = ""
+    if recommendations:
+        rows = []
+        for i, rec in enumerate(recommendations[:5]):
+            color = "#22c55e" if i == 0 else "#f1f5f9"
+            border = "border-bottom:1px solid #1e293b;" if i < len(recommendations) - 1 else ""
+            rows.append(f"""
+      <tr>
+        <td style="padding:12px 0;{border}">
+          <div style="color:{color};font-weight:{'700' if i == 0 else '600'};font-size:15px;">{i+1}. {rec.get('name', '')}</div>
+          <div style="color:#94a3b8;font-size:13px;margin-top:2px;">{rec.get('description', '')}</div>
+        </td>
+      </tr>""")
+        recs_html = f"""
+    <h2 style="color:#f1f5f9;font-size:18px;font-weight:700;margin:0 0 16px;">Opciones recomendadas</h2>
+    <table style="width:100%;border-collapse:collapse;">{"".join(rows)}</table>"""
 
     html = f"""
 <!DOCTYPE html>
@@ -154,15 +182,14 @@ async def send_calculator_results_email(
   <div style="max-width:560px;margin:0 auto;padding:40px 24px;">
 
     <div style="margin-bottom:32px;">
-      <span style="color:#22c55e;font-weight:700;font-size:18px;letter-spacing:2px;">⚡ DÓLAR AFUERA</span>
+      <span style="color:#22c55e;font-weight:700;font-size:18px;letter-spacing:2px;">⚡ {brand.upper()}</span>
     </div>
 
     <h1 style="color:#f1f5f9;font-size:22px;font-weight:700;line-height:1.3;margin:0 0 8px;">
-      Tu análisis de remesas, {nombre_display}
+      Tu análisis, {nombre_display}
     </h1>
     <p style="color:#64748b;font-size:14px;margin:0 0 32px;">Resultados completos de la calculadora</p>
 
-    <!-- Results -->
     <div style="background:#1e293b;border:1px solid #ef4444;border-radius:12px;padding:24px;margin-bottom:16px;">
       <p style="color:#94a3b8;font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:1px;">Lo que pierdes al año con {metodo}</p>
       <p style="color:#ef4444;font-size:36px;font-weight:800;margin:0;">{perdida_fmt} USD</p>
@@ -175,41 +202,18 @@ async def send_calculator_results_email(
       <p style="color:#64748b;font-size:13px;margin:4px 0 0;">usando las opciones recomendadas</p>
     </div>
 
-    <!-- Recommendations -->
-    <h2 style="color:#f1f5f9;font-size:18px;font-weight:700;margin:0 0 16px;">Las 3 mejores opciones para colombianos</h2>
+    {recs_html}
 
-    <table style="width:100%;border-collapse:collapse;">
-      <tr>
-        <td style="padding:12px 0;border-bottom:1px solid #1e293b;">
-          <div style="color:#22c55e;font-weight:700;font-size:15px;">1. Cuenta USD offshore (banco panameño)</div>
-          <div style="color:#94a3b8;font-size:13px;margin-top:2px;">Cuenta bancaria real en USD desde Colombia. Fee: ~0.5%. Sin comisiones ocultas.</div>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:12px 0;border-bottom:1px solid #1e293b;">
-          <div style="color:#f1f5f9;font-weight:600;font-size:15px;">2. Wise</div>
-          <div style="color:#94a3b8;font-size:13px;margin-top:2px;">Transferencias internacionales. Fee: 0.4–1.5%. Tasa de cambio interbancaria.</div>
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:12px 0;">
-          <div style="color:#f1f5f9;font-weight:600;font-size:15px;">3. Remitly</div>
-          <div style="color:#94a3b8;font-size:13px;margin-top:2px;">Para enviar a familia. Fee: 1–3%. Mejor que bancario tradicional.</div>
-        </td>
-      </tr>
-    </table>
-
-    <!-- CTA -->
     <div style="margin:32px 0;">
-      <a href="https://dolarafuera.co/articulo/como-abrir-cuenta-en-dolares-desde-colombia"
+      <a href="{url}"
          style="display:inline-block;background:#22c55e;color:#0f172a;font-weight:700;font-size:15px;padding:14px 28px;border-radius:8px;text-decoration:none;">
-        Ver guía: cómo abrir cuenta USD →
+        Ver guías →
       </a>
     </div>
 
     <div style="border-top:1px solid #1e293b;margin-top:40px;padding-top:24px;">
       <p style="color:#475569;font-size:13px;margin:0;">
-        Carlos Medina · <a href="https://dolarafuera.co" style="color:#22c55e;text-decoration:none;">dolarafuera.co</a>
+        {author} · <a href="{url}" style="color:#22c55e;text-decoration:none;">{url.replace("https://", "")}</a>
       </p>
     </div>
 
@@ -219,6 +223,6 @@ async def send_calculator_results_email(
 """
     return await send_email(
         to=email,
-        subject=f"Pierdes {perdida_fmt} USD/año en remesas (+ cómo solucionarlo)",
+        subject=f"Tus resultados de la calculadora ({brand})",
         html=html,
     )

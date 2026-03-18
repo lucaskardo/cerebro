@@ -53,7 +53,7 @@ _SYSTEMS = {
     ),
     "tiktok_video": (
         "Eres {name}. Creas videos de TikTok de 30-60 segundos. "
-        "HOOK EN LOS PRIMEROS 3 SEGUNDOS o nadie lo ve. Lenguaje coloquial colombiano."
+        "HOOK EN LOS PRIMEROS 3 SEGUNDOS o nadie lo ve. Lenguaje coloquial y natural para tu audiencia."
     ),
     "x_thread": (
         "Eres {name}, {role}. Creas threads de X/Twitter con datos y opinión directa. "
@@ -101,14 +101,14 @@ _USERS = {
     "reddit_draft": (
         'Artículo: {title}. Keyword: {keyword}.\n'
         'Borrador Reddit. JSON:\n'
-        '{{"suggested_subreddits":["r/Colombia","...2 más"],'
+        '{{"suggested_subreddits":["r/subreddit_relevante","...2 más"],'
         '"response_text":"Respuesta sin links ni promo, solo valor",'
         '"notes":"Tipo de thread a buscar"}}'
     ),
     "linkedin_post": (
         'Artículo: {title}. Keyword: {keyword}.\n'
         'Post LinkedIn. JSON:\n'
-        '{{"text":"Post 200-400 palabras","hashtags":["#finanzas","#colombia"],"cta":"CTA final"}}'
+        '{{"text":"Post 200-400 palabras","hashtags":["#hashtag_relevante","...2 más"],"cta":"CTA final"}}'
     ),
     "whatsapp_message": (
         'Artículo: {title}. URL: {article_url}.\n'
@@ -124,7 +124,7 @@ async def adapt_article_to_platforms(
     keyword: str,
     slug: str,
     site_id: str,
-    base_url: str = "https://dolarafuera.co",
+    base_url: str = None,
 ) -> list[dict]:
     """Generate social queue items for all active personas on this site."""
     personas = await db.query("personas", params={
@@ -136,7 +136,20 @@ async def adapt_article_to_platforms(
         logger.info(f"No active personas for site {site_id} — skipping adaptation")
         return []
 
-    article_url = f"{base_url}/articulo/{slug}"
+    # Resolve base_url from site if not provided
+    resolved_base = base_url
+    if not resolved_base:
+        try:
+            site = await db.get_by_id("domain_sites", site_id)
+            if site and site.get("domain"):
+                resolved_base = f"https://{site['domain']}"
+        except Exception:
+            pass
+    if not resolved_base:
+        from packages.core import config
+        resolved_base = f"https://{config.PRIMARY_DOMAIN}" if config.PRIMARY_DOMAIN else ""
+
+    article_url = f"{resolved_base}/articulo/{slug}" if resolved_base else f"/articulo/{slug}"
     created: list[dict] = []
 
     for persona in personas:

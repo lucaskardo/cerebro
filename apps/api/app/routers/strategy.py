@@ -7,7 +7,7 @@ from apps.api.app.middleware.auth import require_auth, audit
 from apps.api.app.schemas.strategy import GoalCreate
 
 logger = get_logger("router.strategy")
-router = APIRouter()
+router = APIRouter(tags=["Strategy"])
 
 
 @router.post("/api/goals")

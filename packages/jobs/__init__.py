@@ -412,3 +412,246 @@ async def _handle_partner_delivery(payload: dict) -> dict:
 
     logger.info(f"Partner delivery success: lead={lead_id} webhook={webhook_id} status={resp.status_code}")
     return {"status": "delivered", "http_status": resp.status_code}
+
+
+@register("retention_cleanup")
+async def _handle_retention_cleanup(payload: dict) -> dict:
+    """
+    Apply retention policies: delete rows older than max_age_days or exceeding max_rows.
+    Only touches rows matching optional status_filter.
+    Idempotent — safe to run multiple times.
+    """
+    from datetime import date, timedelta
+
+    policies = await db.query("retention_policies", params={
+        "select": "*",
+        "active": "eq.true",
+    })
+    if not policies:
+        return {"policies_run": 0, "rows_deleted": 0}
+
+    total_deleted = 0
+    results = []
+
+    for policy in policies:
+        table = policy["table_name"]
+        max_age = policy.get("max_age_days")
+        max_rows = policy.get("max_rows")
+        status_filter = policy.get("status_filter")
+        deleted = 0
+
+        try:
+            # Age-based deletion via REST DELETE with filter params
+            if max_age:
+                cutoff = (date.today() - timedelta(days=max_age)).isoformat()
+                filters: dict = {"created_at": f"lt.{cutoff}T00:00:00Z"}
+                if status_filter:
+                    filters["status"] = f"eq.{status_filter}"
+                n = await db.delete_where(table, filters)
+                deleted += n
+                logger.info(f"Retention: deleted {n} rows from {table} (age>{max_age}d)")
+
+            # Row-count cap: skip if max_rows only (requires subquery — not supported via REST)
+            # This is handled at infra level; log a reminder if configured.
+            if max_rows and not max_age:
+                logger.info(f"Retention: max_rows cap for {table} requires a DB function — skipping via REST")
+
+            results.append({"table": table, "deleted": deleted})
+            total_deleted += deleted
+
+        except Exception as e:
+            logger.warning(f"Retention failed for {table}: {e}")
+            results.append({"table": table, "deleted": 0, "error": str(e)[:100]})
+
+    logger.info(f"Retention cleanup complete: {total_deleted} rows deleted across {len(results)} tables")
+    return {"policies_run": len(results), "rows_deleted": total_deleted, "details": results}
+
+
+@register("backup_snapshot")
+async def _handle_backup_snapshot(payload: dict) -> dict:
+    """
+    Record row counts and detect anomalies for all key tables.
+    Not a full DB dump — that's infra-level. This is an integrity check.
+    """
+    MONITORED_TABLES = [
+        "leads", "content_assets", "missions", "domain_sites",
+        "personas", "experiments", "opportunities", "tasks",
+        "jobs", "skill_runs", "attribution_events", "touchpoints",
+        "audit_log", "strategies", "goals", "knowledge_entries",
+        "cycle_runs", "backup_snapshots",
+    ]
+
+    # Insert snapshot record (running)
+    snap = await db.insert("backup_snapshots", {
+        "snapshot_type": "daily_counts",
+        "status": "running",
+    })
+    snap_id = snap["id"] if snap else None
+
+    counts = {}
+    anomalies = []
+
+    for table in MONITORED_TABLES:
+        try:
+            n = await db.count(table)
+            counts[table] = n
+        except Exception as e:
+            counts[table] = -1
+            anomalies.append({"table": table, "issue": "count_failed", "error": str(e)[:100]})
+
+    # Anomaly detection
+    if counts.get("leads", 0) == 0:
+        anomalies.append({"table": "leads", "issue": "zero_leads", "value": 0})
+    if counts.get("jobs", -1) > 500:
+        anomalies.append({"table": "jobs", "issue": "queue_backlog", "value": counts["jobs"]})
+    if counts.get("audit_log", 0) > 50000:
+        anomalies.append({"table": "audit_log", "issue": "audit_log_large", "value": counts["audit_log"]})
+
+    # Estimate total data size (rough: assume 1KB avg row)
+    total_rows = sum(v for v in counts.values() if v > 0)
+    size_mb = round(total_rows * 1024 / 1_000_000, 2)
+
+    status = "completed"
+    if snap_id:
+        await db.update("backup_snapshots", snap_id, {
+            "status": status,
+            "tables_checked": counts,
+            "anomalies": anomalies,
+            "size_estimate_mb": size_mb,
+        })
+
+    # Create alerts for anomalies
+    if anomalies:
+        from packages.core import create_alert
+        for a in anomalies:
+            await create_alert(
+                "data_anomaly",
+                f"Snapshot anomaly in {a['table']}: {a['issue']}",
+                severity="warning",
+            )
+
+    logger.info(f"Backup snapshot complete: {len(counts)} tables, {len(anomalies)} anomalies, ~{size_mb}MB")
+    return {"tables": len(counts), "anomalies": len(anomalies), "size_estimate_mb": size_mb}
+
+
+@register("system_health_check")
+async def _handle_system_health_check(payload: dict) -> dict:
+    """
+    Hourly health check: budget, error rate, dead-lettered jobs, loop staleness.
+    Creates alerts when thresholds are breached.
+    """
+    from packages.core import config, create_alert, CostTracker
+    from datetime import timedelta
+
+    issues = []
+    now = datetime.now(timezone.utc)
+
+    # 1. Budget check
+    try:
+        tracker = CostTracker()
+        budget = await tracker.check_budget()
+        if budget.get("blocked"):
+            issues.append("budget_exceeded")
+            await create_alert(
+                "budget_exceeded",
+                f"Daily budget ${config.DAILY_BUDGET} reached. All LLM calls blocked.",
+                severity="critical",
+            )
+        elif budget.get("warning"):
+            pct = budget.get("percent", 0)
+            await create_alert(
+                "budget_warning",
+                f"Budget at {pct:.0f}% (${budget.get('spent', 0):.2f}/${config.DAILY_BUDGET})",
+                severity="warning",
+            )
+    except Exception as e:
+        logger.warning(f"Health check: budget check failed: {e}")
+
+    # 2. Dead-lettered job spike (>5 in last hour)
+    try:
+        cutoff = (now - timedelta(hours=1)).isoformat()
+        dead = await db.query("jobs", params={
+            "select": "id",
+            "status": "eq.dead_lettered",
+            "created_at": f"gte.{cutoff}",
+        })
+        if len(dead) >= 5:
+            issues.append("dead_letter_spike")
+            await create_alert(
+                "dead_letter_spike",
+                f"{len(dead)} jobs dead-lettered in the last hour.",
+                severity="critical",
+            )
+    except Exception as e:
+        logger.warning(f"Health check: dead-letter check failed: {e}")
+
+    # 3. Loop staleness (no completed cycle in last 24h if scheduler enabled)
+    try:
+        if config.LOOP_SCHEDULER_ENABLED:
+            cutoff_24h = (now - timedelta(hours=24)).isoformat()
+            recent_cycles = await db.query("cycle_runs", params={
+                "select": "id",
+                "status": "eq.completed",
+                "created_at": f"gte.{cutoff_24h}",
+                "limit": "1",
+            })
+            if not recent_cycles:
+                issues.append("loop_stale")
+                await create_alert(
+                    "loop_stale",
+                    "No completed loop cycle in the last 24 hours.",
+                    severity="warning",
+                )
+    except Exception as e:
+        logger.warning(f"Health check: loop staleness check failed: {e}")
+
+    # 4. Pending approvals older than 48h
+    try:
+        cutoff_48h = (now - timedelta(hours=48)).isoformat()
+        stale_approvals = await db.query("approvals", params={
+            "select": "id",
+            "status": "eq.pending",
+            "created_at": f"lt.{cutoff_48h}",
+        })
+        if stale_approvals:
+            issues.append("stale_approvals")
+            await create_alert(
+                "stale_approvals",
+                f"{len(stale_approvals)} approvals pending for >48h.",
+                severity="warning",
+                action_url="/dashboard/approvals",
+                action_label="Ver aprobaciones",
+            )
+    except Exception as e:
+        logger.warning(f"Health check: stale approvals check failed: {e}")
+
+    logger.info(f"System health check complete: {len(issues)} issue(s): {issues or 'none'}")
+    return {"issues": issues, "checked_at": now.isoformat()}
+
+
+# ─── Daily scheduler ──────────────────────────────────────────────────────────
+
+async def run_scheduler(interval_seconds: int = 3600):
+    """
+    Hourly tick that enqueues maintenance jobs with date-based idempotency keys.
+    Runs alongside the worker. Restarts safely — idempotency prevents duplicates.
+    """
+    from datetime import date, timedelta
+    logger.info(f"Maintenance scheduler started (interval={interval_seconds}s)")
+    while True:
+        try:
+            today = date.today().isoformat()
+            hour = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H")
+
+            # Daily jobs (idempotency key includes date → runs once per day)
+            await enqueue("daily_aggregation",  {"date": today},  idempotency_key=f"daily_aggregation:{today}")
+            await enqueue("backup_snapshot",     {},               idempotency_key=f"backup_snapshot:{today}")
+            await enqueue("retention_cleanup",   {},               idempotency_key=f"retention_cleanup:{today}")
+
+            # Hourly jobs
+            await enqueue("system_health_check", {}, idempotency_key=f"system_health_check:{hour}")
+
+        except Exception as e:
+            logger.error(f"Scheduler tick error: {e}")
+
+        await asyncio.sleep(interval_seconds)

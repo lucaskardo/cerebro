@@ -139,6 +139,43 @@ class SupabaseClient:
         await self.query(table, "DELETE", params={"id": f"eq.{id}"})
         return True
 
+    async def delete_where(self, table: str, filters: dict) -> int:
+        """DELETE rows matching filters. Returns count of deleted rows."""
+        headers = {**self._headers, "Prefer": "return=representation,count=exact"}
+        url = f"{self.url}/rest/v1/{table}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                resp = await client.delete(url, headers=headers, params=filters)
+                if resp.status_code >= 400:
+                    raise SupabaseError(f"DELETE {table}: HTTP {resp.status_code} — {resp.text[:200]}")
+                rows = resp.json() if resp.text else []
+                return len(rows)
+            except (SupabaseError, SupabaseTimeout):
+                raise
+            except Exception as e:
+                raise SupabaseError(f"delete_where {table}: {e}") from e
+
+    async def count(self, table: str, params: dict = None) -> int:
+        """Return row count matching params using PostgREST HEAD + count=exact."""
+        headers = {**self._headers, "Prefer": "count=exact"}
+        url = f"{self.url}/rest/v1/{table}"
+        query_params = {"select": "id", **(params or {})}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                resp = await client.get(url, headers=headers, params=query_params)
+                if resp.status_code >= 400:
+                    raise SupabaseError(f"COUNT {table}: HTTP {resp.status_code}")
+                # Content-Range: 0-N/TOTAL
+                cr = resp.headers.get("content-range", "")
+                if "/" in cr:
+                    total = cr.split("/")[-1]
+                    return int(total) if total != "*" else len(resp.json() if resp.text else [])
+                return len(resp.json() if resp.text else [])
+            except (SupabaseError, SupabaseTimeout):
+                raise
+            except Exception as e:
+                raise SupabaseError(f"count {table}: {e}") from e
+
 # Singleton
 db = SupabaseClient()
 

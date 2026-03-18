@@ -9,7 +9,7 @@ from apps.api.app.middleware.auth import require_auth, audit
 from apps.api.app.schemas.content import ContentGenerate, ContentApprove
 
 logger = get_logger("router.content")
-router = APIRouter()
+router = APIRouter(tags=["Content"])
 
 
 @router.post("/api/content/generate")

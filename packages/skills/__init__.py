@@ -201,6 +201,17 @@ class CommunityEngagementSkill(Skill):
 
     async def execute(self, params: dict) -> dict:
         from packages.ai import complete
+        # Pull brand context from site if available
+        brand_persona = params.get("brand_persona", "an expert in the field")
+        brand_tone = params.get("brand_tone", "genuine, helpful, non-promotional")
+        if not params.get("brand_persona") and params.get("site_id"):
+            try:
+                site = await db.get_by_id("domain_sites", params["site_id"])
+                if site:
+                    brand_persona = site.get("brand_persona") or brand_persona
+                    brand_tone = site.get("brand_tone") or brand_tone
+            except Exception:
+                pass
         result = await complete(
             prompt=f"""Draft a helpful response for this community discussion.
 Topic: {params.get('topic', '')}
@@ -212,7 +223,7 @@ Rules:
 - Use natural language, like a real person
 - Only mention our product if directly relevant
 - Keep it concise (2-3 paragraphs max)""",
-            system="You are a financial specialist for Colombians. You help in online communities with genuine advice.",
+            system=f"You are {brand_persona}. Tone: {brand_tone}. You help in online communities with genuine advice.",
             model="haiku",
             pipeline_step="community_draft",
         )
@@ -240,9 +251,24 @@ class SocialDistributionSkill(Skill):
         prompts_map = {"tiktok": TIKTOK_ADAPT, "instagram": INSTAGRAM_ADAPT, "x": TWITTER_ADAPT}
         prompt_template = prompts_map.get(platform, INSTAGRAM_ADAPT)
 
+        # Pull brand context from site if available
+        brand_persona = params.get("brand_persona", "content creator")
+        brand_tone = params.get("brand_tone", "engaging, authentic, helpful")
+        audience_summary = params.get("brand_audience_summary", "target audience")
+        if params.get("site_id") and not params.get("brand_persona"):
+            try:
+                site = await db.get_by_id("domain_sites", params["site_id"])
+                if site:
+                    brand_persona = site.get("brand_persona") or brand_persona
+                    brand_tone = site.get("brand_tone") or brand_tone
+                    aud = site.get("brand_audience") or {}
+                    audience_summary = ", ".join(aud.get("segments", [])) if isinstance(aud, dict) else audience_summary
+            except Exception:
+                pass
+
         result = await complete(
             prompt=f"{prompt_template}\n\nArticle to adapt:\n{params.get('content', '')[:3000]}",
-            system="You create social media content for Colombian financial education.",
+            system=f"You are {brand_persona}. Tone: {brand_tone}. Audience: {audience_summary}. Create social media content for {platform}.",
             model="haiku",
             json_mode=True,
             pipeline_step=f"social_{platform}",

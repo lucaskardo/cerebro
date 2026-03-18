@@ -11,7 +11,7 @@ from apps.api.app.schemas.personas import (
 )
 
 logger = get_logger("router.personas")
-router = APIRouter()
+router = APIRouter(tags=["Personas"])
 
 
 DEFAULT_PLATFORMS = ["instagram", "tiktok", "x", "reddit", "linkedin", "whatsapp", "email"]

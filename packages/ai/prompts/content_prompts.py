@@ -29,7 +29,7 @@ JSON exacto:
     "faq_questions": ["5 preguntas People Also Ask"],
     "comparison_angle": "qué comparar si aplica",
     "data_points_needed": ["datos verificables para E-E-A-T"],
-    "tone": "amigo colombiano que sabe de finanzas",
+    "tone": "{brand_tone_example}",
     "first_paragraph_hook": "respuesta directa 30-50 palabras"
 }}"""
 
@@ -71,12 +71,12 @@ JSON:
     "partner_mentions": [{{"position": "párrafo N", "context": "cómo"}}]
 }}"""
 
-HUMANIZE_SYSTEM = """Eres editor colombiano. Haces contenido financiero más humano y accesible.
-Suena como Carlos Medina: colombiano real, cercano, con datos.
+HUMANIZE_SYSTEM = """Eres {brand_persona}. Haces contenido más humano y accesible para tu audiencia.
+Tono requerido: {brand_tone}.
 
 REGLAS:
-- Expresiones colombianas naturales (no exageradas)
-- Ejemplos con situaciones reales colombianas
+- Expresiones naturales apropiadas para la audiencia, no forzadas
+- Ejemplos con situaciones reales y concretas
 - Datos técnicos 100% intactos
 - NO cambiar claims ni números
 - NO agregar datos nuevos
@@ -84,7 +84,7 @@ REGLAS:
 
 Responde SOLO en JSON válido."""
 
-HUMANIZE_USER = """Humaniza para audiencia colombiana:
+HUMANIZE_USER = """Humaniza para la audiencia objetivo ({brand_audience_summary}):
 
 Título: {title}
 
@@ -123,8 +123,9 @@ JSON exacto:
 
 # ─── Social adaptation prompts (Bloque 5) ────────────────────────────────────
 
-SOCIAL_SYSTEM = """Eres {persona_name}, experto en finanzas internacionales para colombianos.
+SOCIAL_SYSTEM = """Eres {persona_name}.
 Tono: {brand_tone}. Plataforma: {platform}.
+Audiencia: {brand_audience_summary}.
 Convierte contenido de blog en formato nativo de la plataforma.
 Responde SOLO en JSON válido."""
 
@@ -138,7 +139,7 @@ REGLAS:
 - Hook (0-3s): dato sorprendente o pregunta que genere curiosidad
 - Desarrollo (3-45s): máximo 3 puntos concretos, uno por "pantalla"
 - CTA (45-60s): "Link en bio para la guía completa"
-- Tono: directo, energético, colombiano auténtico
+- Tono: directo, energético, auténtico — adaptado a la audiencia
 - NO mencionar marcas comerciales directamente
 
 JSON exacto:
@@ -212,12 +213,13 @@ JSON exacto:
     "hashtags": ["3-5 hashtags profesionales sin #"]
 }}"""
 
-REDDIT_ADAPT = """Convierte este artículo en post Reddit para comunidades de finanzas/Colombia.
+REDDIT_ADAPT = """Convierte este artículo en post Reddit relevante para la audiencia.
 
 Título: {title}
 Resumen: {summary}
 Puntos clave: {key_points}
 URL: {article_url}
+Comunidades sugeridas: {community_context}
 
 REGLAS CRÍTICAS:
 - Tono: conversacional, honesto, NO publicitario
@@ -226,11 +228,11 @@ REGLAS CRÍTICAS:
 - Incluir datos verificables con fuentes
 - CTA sutil al final (link al artículo como "fuente")
 - NUNCA sonar como spam o marketing
-- Sugerir subreddit apropiado
+- Sugerir subreddit apropiado según la temática
 
 JSON exacto:
 {{
-    "subreddit_suggestions": ["r/colombia", "r/PersonalFinanceLatam"],
+    "subreddit_suggestions": ["r/subreddit1", "r/subreddit2"],
     "title": "título del post Reddit (descriptivo, no clickbait)",
     "body": "cuerpo completo del post en Markdown de Reddit",
     "flair": "flair sugerido si aplica"
@@ -245,7 +247,7 @@ URL: {article_url}
 
 REGLAS:
 - Máx 300 palabras, párrafos muy cortos
-- Emojis financieros naturales (💰 📊 🇨🇴)
+- Emojis relevantes y naturales (💰 📊 ✅)
 - Bullet points con puntos clave
 - Link al final como "Lee más:"
 - Tono: amigo que comparte info útil

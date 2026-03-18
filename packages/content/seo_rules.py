@@ -7,7 +7,9 @@ VERSION = "v2026.03"
 
 
 def generate_article_schema(title: str, description: str, url: str,
-                            author: str = "Carlos Medina",
+                            author: str = "",
+                            author_job_title: str = "",
+                            publisher_name: str = "",
                             date_published: str = "", date_modified: str = "",
                             image_url: str = None) -> dict:
     schema = {
@@ -18,13 +20,14 @@ def generate_article_schema(title: str, description: str, url: str,
         "author": {
             "@type": "Person",
             "name": author,
-            "jobTitle": "Especialista en Finanzas Internacionales",
         },
         "datePublished": date_published,
         "dateModified": date_modified or date_published,
         "mainEntityOfPage": {"@type": "WebPage", "@id": url},
-        "publisher": {"@type": "Organization", "name": "Dólar Afuera"},
+        "publisher": {"@type": "Organization", "name": publisher_name},
     }
+    if author_job_title:
+        schema["author"]["jobTitle"] = author_job_title
     if image_url:
         schema["image"] = image_url
     return schema
@@ -56,10 +59,12 @@ def generate_breadcrumb_schema(items: list) -> dict:
     }
 
 
-def generate_meta_tags(title: str, description: str, url: str, 
+def generate_meta_tags(title: str, description: str, url: str,
+                       brand_name: str = "",
                        image_url: str = None) -> dict:
+    title_tag = f"{title} | {brand_name}" if brand_name else title
     return {
-        "title": f"{title} | Dólar Afuera",
+        "title": title_tag,
         "description": description[:160],
         "canonical": url,
         "og:title": title[:60],

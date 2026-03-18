@@ -7,7 +7,7 @@ from apps.api.app.middleware.auth import require_auth, audit
 from apps.api.app.schemas.leads import LeadCapture, LeadTransition, LeadOutcomeCreate
 
 logger = get_logger("router.leads")
-router = APIRouter()
+router = APIRouter(tags=["Leads"])
 
 # Valid lead state machine transitions
 VALID_TRANSITIONS: dict[str, list[str]] = {

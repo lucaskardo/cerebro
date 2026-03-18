@@ -7,7 +7,7 @@ from packages.core import db, get_logger
 from apps.api.app.middleware.ratelimit import rate_limit
 
 logger = get_logger("router.attribution")
-router = APIRouter()
+router = APIRouter(tags=["Attribution"])
 
 
 class AttributionEvent(BaseModel):

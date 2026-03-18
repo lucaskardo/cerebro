@@ -7,10 +7,15 @@ from packages.core import db, cost_tracker, config, create_alert, get_logger
 from apps.api.app.middleware.auth import require_auth, audit
 
 logger = get_logger("router.system")
-router = APIRouter()
+router = APIRouter(tags=["System"])
 
 
-# ─── Health ──────────────────────────────────────────────────────────────────
+# ─── Root / Health ───────────────────────────────────────────────────────────
+
+@router.get("/", include_in_schema=False)
+async def root():
+    return {"status": "ok", "service": "cerebro-api", "version": "7.0.0", "docs": "/api/docs"}
+
 
 @router.get("/health")
 async def health():

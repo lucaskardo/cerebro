@@ -195,7 +195,7 @@ async def _research_keyword(keyword: str, brand: dict, run_id: str) -> dict:
         prompt=prompts.RESEARCH_USER.format(
             keyword=keyword,
             partner_name=brand.get("partner_name", ""),
-            country=brand.get("country", "Colombia"),
+            country=brand.get("country", ""),
             target_audience=json.dumps(brand.get("target_audience", {}), ensure_ascii=False),
             core_topics=json.dumps(brand.get("core_topics", []), ensure_ascii=False),
         ),
@@ -226,16 +226,17 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
     result = await complete(
         prompt=prompts.BRIEF_USER.format(
             keyword=keyword,
-            country=brand.get("country", "Colombia"),
-            partner_name=brand.get("partner_name", "Dólar Afuera"),
+            country=brand.get("country", ""),
+            partner_name=brand.get("partner_name", ""),
             target_audience=json.dumps(brand.get("target_audience", {}), ensure_ascii=False),
             core_topics=json.dumps(brand.get("core_topics", []), ensure_ascii=False),
             cta_config=json.dumps(brand.get("cta_config", {}), ensure_ascii=False),
+            brand_tone_example=brand.get("brand_tone", "directo, honesto, útil"),
         ) + research_context,
         system=prompts.BRIEF_SYSTEM.format(
-            brand_persona=brand.get("brand_persona", "Carlos Medina, especialista en finanzas internacionales"),
-            brand_tone=brand.get("brand_tone", "amigo que sabe de finanzas, cercano"),
-            brand_audience_summary=audience_summary or "latinoamericanos interesados en finanzas",
+            brand_persona=brand.get("brand_persona", "experto en el tema"),
+            brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
+            brand_audience_summary=audience_summary or "personas interesadas en el tema",
         ),
         model="haiku",
         json_mode=True,
@@ -278,9 +279,9 @@ async def _generate_draft(brief: dict, brand: dict, run_id: str) -> dict:
             target_word_count=brief.get("target_word_count", 1500),
         ),
         system=prompts.DRAFT_SYSTEM.format(
-            brand_persona=brand.get("brand_persona", "Carlos Medina, especialista en finanzas internacionales"),
-            brand_tone=brand.get("brand_tone", "amigo que sabe de finanzas, cercano"),
-            partner_name=brand.get("partner_name", "Dólar Afuera"),
+            brand_persona=brand.get("brand_persona", "experto en el tema"),
+            brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
+            partner_name=brand.get("partner_name", ""),
         ),
         model="sonnet",
         max_tokens=8192,
@@ -292,12 +293,18 @@ async def _generate_draft(brief: dict, brand: dict, run_id: str) -> dict:
 
 
 async def _humanize(draft: dict, brand: dict, run_id: str) -> dict:
+    audience = brand.get("target_audience", {})
+    audience_summary = ", ".join(audience.get("segments", [])) if isinstance(audience, dict) else str(audience)
     result = await complete(
         prompt=prompts.HUMANIZE_USER.format(
             title=draft.get("title", ""),
             body_md=draft.get("body_md", "")[:6000],  # Limit for context window
+            brand_audience_summary=audience_summary or "personas interesadas en el tema",
         ),
-        system=prompts.HUMANIZE_SYSTEM,
+        system=prompts.HUMANIZE_SYSTEM.format(
+            brand_persona=brand.get("brand_persona", "experto en el tema"),
+            brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
+        ),
         model="haiku",
         max_tokens=8192,
         json_mode=True,
@@ -393,13 +400,13 @@ def _inject_utm_params(body_html: str, site_slug: str, asset_id: str) -> str:
 def _build_brand_context(mission: dict, site: dict = None) -> dict:
     """Merge mission + site brand config into unified context for prompts."""
     base = {
-        "partner_name": mission.get("partner_name", "Dólar Afuera"),
-        "country": mission.get("country", "Colombia"),
+        "partner_name": mission.get("partner_name", ""),
+        "country": mission.get("country", ""),
         "target_audience": mission.get("target_audience", {}),
         "core_topics": mission.get("core_topics", []),
         "cta_config": mission.get("cta_config", {}),
-        "brand_persona": "Carlos Medina, especialista en finanzas internacionales",
-        "brand_tone": "amigo colombiano que sabe de finanzas, cercano, honesto, datos reales",
+        "brand_persona": mission.get("brand_persona", "experto en el tema"),
+        "brand_tone": mission.get("brand_tone", "directo, honesto, útil"),
     }
     if site:
         if site.get("brand_persona"):

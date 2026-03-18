@@ -7,7 +7,7 @@ from apps.api.app.middleware.auth import require_auth, audit
 from apps.api.app.schemas.loop import LoopRunRequest
 
 logger = get_logger("router.loop")
-router = APIRouter()
+router = APIRouter(tags=["Loop"])
 
 
 @router.post("/api/loop/run")

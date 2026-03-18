@@ -10,7 +10,7 @@ from apps.api.app.schemas.execution import (
 )
 
 logger = get_logger("router.execution")
-router = APIRouter()
+router = APIRouter(tags=["Execution"])
 
 
 # ─── Opportunities ────────────────────────────────────────────────────────────
