@@ -30,7 +30,7 @@ PUBLIC_ROUTES: set[tuple[str, str]] = {
 # GET path prefixes that are always public (public article renderer)
 PUBLIC_GET_PREFIXES: tuple[str, ...] = (
     "/api/content/by-slug/",
-    "/api/content/",     # public article read for site renderer
+    "/api/content",     # public article listing + read for site renderer
 )
 
 

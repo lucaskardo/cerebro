@@ -8,12 +8,12 @@ const SITE_URL = `https://${process.env.PRIMARY_DOMAIN || "dolarafuera.co"}`;
 export const metadata: Metadata = {
   title: "Dólar Afuera — Finanzas en USD para colombianos",
   description:
-    "Guías, herramientas y estrategias para colombianos que quieren cuentas en dólares, protección cambiaria y mejores remesas.",
+    "Guías y estrategias para colombianos que quieren cuentas en dólares, protección cambiaria y mejores remesas.",
   alternates: { canonical: SITE_URL },
   openGraph: {
     title: "Dólar Afuera — Finanzas en USD para colombianos",
     description:
-      "Guías, herramientas y estrategias para colombianos que quieren cuentas en dólares, protección cambiaria y mejores remesas.",
+      "Guías y estrategias para colombianos que quieren cuentas en dólares, protección cambiaria y mejores remesas.",
     url: SITE_URL,
     type: "website",
     siteName: "Dólar Afuera",
@@ -90,7 +90,7 @@ export default async function HomePage() {
             name: "Dólar Afuera",
             url: SITE_URL,
             description:
-              "Guías y herramientas para colombianos que quieren finanzas en dólares.",
+              "Guías para colombianos que quieren finanzas en dólares.",
           }),
         }}
       />
@@ -108,7 +108,7 @@ export default async function HomePage() {
           </h1>
 
           <p className="text-slate-300 text-lg sm:text-xl leading-relaxed mb-10 max-w-2xl mx-auto">
-            Guías y herramientas para colombianos que quieren cuentas en USD,
+            Guías para colombianos que quieren cuentas en USD,
             protección cambiaria y mejores remesas.
           </p>
 
@@ -166,7 +166,7 @@ export default async function HomePage() {
         {/* ── TOOLS ───────────────────────────────────────────────────── */}
         <section>
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold text-slate-100 mb-2">Herramientas gratuitas</h2>
+            <h2 className="text-2xl font-bold text-slate-100 mb-2">Recursos gratuitos</h2>
             <p className="text-slate-400 text-sm">Toma mejores decisiones financieras en minutos.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
