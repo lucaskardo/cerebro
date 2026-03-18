@@ -245,6 +245,93 @@ async def revenue_by_asset(site_id: Optional[str] = None):
             for k, v in sorted(asset_rev.items(), key=lambda x: x[1], reverse=True)]
 
 
+@router.get("/api/reports/attribution-chain")
+async def attribution_chain(site_id: Optional[str] = None, days: int = 30):
+    """
+    Full attribution chain: asset → leads → qualified → accepted → revenue.
+    Joins content_assets + leads + lead_outcomes.
+    """
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=days)).isoformat()
+
+    # Get leads with site/date filter
+    leads_params = {
+        "select": "id,asset_id,site_id,current_status,cta_variant,utm_source",
+        "created_at": f"gte.{since}T00:00:00Z",
+    }
+    if site_id:
+        leads_params["site_id"] = f"eq.{site_id}"
+    leads = await db.query("leads", params=leads_params)
+
+    if not leads:
+        return []
+
+    # Get accepted outcomes for revenue
+    outcomes = await db.query("lead_outcomes", params={
+        "select": "lead_id,revenue_value,status",
+        "status": "eq.accepted",
+    })
+    revenue_by_lead = {o["lead_id"]: float(o.get("revenue_value") or 0) for o in outcomes}
+
+    # Get content_assets titles
+    asset_ids = list({l["asset_id"] for l in leads if l.get("asset_id")})
+    assets_map: dict = {}
+    if asset_ids:
+        # PostgREST `in.()` filter syntax: `id=in.(uuid1,uuid2,...)`
+        # The db.query() method passes params as URL query params, so this works.
+        ids_str = ",".join(asset_ids)
+        asset_rows = await db.query("content_assets", params={
+            "select": "id,title,keyword",
+            "id": f"in.({ids_str})",
+        })
+        assets_map = {a["id"]: a for a in asset_rows}
+
+    # Aggregate per asset
+    agg: dict = {}
+    for lead in leads:
+        aid = lead.get("asset_id") or "unknown"
+        if aid not in agg:
+            asset = assets_map.get(aid, {})
+            agg[aid] = {
+                "asset_id": aid,
+                "asset_title": asset.get("title", "Unknown"),
+                "asset_keyword": asset.get("keyword", ""),
+                "leads_generated": 0,
+                "leads_qualified": 0,
+                "leads_accepted": 0,
+                "revenue": 0.0,
+                "_cta_counts": {},
+                "_utm_counts": {},
+            }
+
+        agg[aid]["leads_generated"] += 1
+
+        status = lead.get("current_status", "")
+        if status in ("qualified", "delivered", "accepted", "closed"):
+            agg[aid]["leads_qualified"] += 1
+        if status == "accepted":
+            agg[aid]["leads_accepted"] += 1
+            agg[aid]["revenue"] += revenue_by_lead.get(lead["id"], 0)
+
+        # Track CTA/UTM for top variant
+        cta = lead.get("cta_variant") or "unknown"
+        utm = lead.get("utm_source") or "direct"
+        agg[aid]["_cta_counts"][cta] = agg[aid]["_cta_counts"].get(cta, 0) + 1
+        agg[aid]["_utm_counts"][utm] = agg[aid]["_utm_counts"].get(utm, 0) + 1
+
+    # Clean up and sort
+    result = []
+    for row in agg.values():
+        cta_counts = row.pop("_cta_counts")
+        utm_counts = row.pop("_utm_counts")
+        row["top_cta_variant"] = max(cta_counts, key=cta_counts.get) if cta_counts else None
+        row["top_utm_source"] = max(utm_counts, key=utm_counts.get) if utm_counts else None
+        row["revenue"] = round(row["revenue"], 2)
+        result.append(row)
+
+    return sorted(result, key=lambda x: x["leads_generated"], reverse=True)
+
+
 @router.get("/api/reports/leads-by-cta")
 async def leads_by_cta(site_id: Optional[str] = None, days: int = 30):
     from datetime import date, timedelta
