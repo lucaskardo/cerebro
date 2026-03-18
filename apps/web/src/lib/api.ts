@@ -156,6 +156,44 @@ export interface RevenueByAsset {
   revenue: number;
 }
 
+export interface ClientProfile {
+  id: string;
+  site_id: string;
+  company_name: string;
+  company_url: string | null;
+  country: string;
+  industry: string | null;
+  value_proposition: string | null;
+  core_competencies: string[];
+  pain_points: string[];
+  desires: string[];
+  target_segments: Array<{ name: string; description: string; size: string; priority: string }>;
+  advantages: string[];
+  weaknesses: string[];
+  competitors: Array<{ name: string; url?: string; positioning: string; weakness: string }>;
+  content_angles: string[];
+  customer_objections: string[];
+  buying_triggers: string[];
+  market_trends: string[];
+  key_differentiators: string[];
+  brand_voice_notes: string | null;
+  research_depth: "none" | "initial" | "standard" | "deep";
+  research_version: number;
+  last_researched_at: string | null;
+  research_entry_count?: number;
+}
+
+export interface MarketResearch {
+  id: string;
+  site_id: string;
+  research_type: string;
+  query: string;
+  findings: string | null;
+  confidence: "low" | "medium" | "high";
+  source: string;
+  created_at: string;
+}
+
 export interface BusinessHealth {
   leads_today: number;
   leads_this_week: number;
@@ -361,6 +399,10 @@ export const api = {
   loopStatus: () => fetchAPI<Record<string, unknown>>("/api/loop/status"),
   knowledgeInsights: (limit = 12) =>
     fetchAPI<Record<string, unknown>[]>(`/api/knowledge/insights?limit=${limit}`),
+  intelligenceProfile: (siteId: string) =>
+    fetchAPI<ClientProfile>(`/api/intelligence/profile/${siteId}`),
+  intelligenceResearchLog: (siteId: string, limit = 20) =>
+    fetchAPI<MarketResearch[]>(`/api/intelligence/research-log/${siteId}?limit=${limit}`),
   socialQueue: (params?: { persona_id?: string; platform?: string; status?: string; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.persona_id) q.set("persona_id", params.persona_id);
@@ -469,5 +511,44 @@ export async function updateQueueItem(
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`Update queue item failed: ${res.status}`);
+  return res.json();
+}
+
+export async function runIntelligenceResearch(data: {
+  site_id: string;
+  company: string;
+  country: string;
+  company_url?: string;
+  industry?: string;
+}): Promise<ClientProfile> {
+  const res = await fetch(`${API_URL}/api/intelligence/research`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Research failed: ${res.status}`);
+  return res.json();
+}
+
+export async function refreshIntelligence(siteId: string): Promise<ClientProfile> {
+  const res = await fetch(`${API_URL}/api/intelligence/refresh/${siteId}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error(`Refresh failed: ${res.status}`);
+  return res.json();
+}
+
+export async function patchIntelligenceProfile(
+  siteId: string,
+  data: Partial<ClientProfile>
+): Promise<ClientProfile> {
+  const res = await fetch(`${API_URL}/api/intelligence/profile/${siteId}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Patch failed: ${res.status}`);
   return res.json();
 }
