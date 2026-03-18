@@ -108,10 +108,14 @@ async def create_knowledge(body: dict, request: Request, _auth=Depends(require_a
 
 @router.get("/api/knowledge/insights")
 async def top_insights(site_id: Optional[str] = None, limit: int = 10):
-    params = {
-        "select": "*", "confidence": "gte.0.7",
-        "order": "confidence.desc", "limit": str(limit),
-    }
-    if site_id:
-        params["site_id"] = f"eq.{site_id}"
-    return await db.query("knowledge_entries", params=params)
+    try:
+        params = {
+            "select": "*", "confidence": "gte.0.7",
+            "order": "confidence.desc", "limit": str(limit),
+        }
+        if site_id:
+            params["site_id"] = f"eq.{site_id}"
+        return await db.query("knowledge_entries", params=params)
+    except Exception as e:
+        logger.error(f"top_insights error: {e}")
+        return []

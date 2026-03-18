@@ -57,14 +57,18 @@ async def cycle_history(goal_id: Optional[str] = None, limit: int = 20):
 @router.get("/api/loop/status")
 async def loop_status():
     """Current loop health: last cycle, feature flag state, kill switch preview."""
-    from packages.core import config as cfg
+    try:
+        from packages.core import config as cfg
 
-    last_cycles = await db.query("cycle_runs", params={
-        "select": "*", "order": "created_at.desc", "limit": "5"
-    })
+        last_cycles = await db.query("cycle_runs", params={
+            "select": "*", "order": "created_at.desc", "limit": "5"
+        })
 
-    return {
-        "scheduler_enabled": getattr(cfg, "LOOP_SCHEDULER_ENABLED", False),
-        "last_cycle": last_cycles[0] if last_cycles else None,
-        "recent_cycles": last_cycles,
-    }
+        return {
+            "scheduler_enabled": getattr(cfg, "LOOP_SCHEDULER_ENABLED", False),
+            "last_cycle": last_cycles[0] if last_cycles else None,
+            "recent_cycles": last_cycles,
+        }
+    except Exception as e:
+        logger.error(f"loop_status error: {e}")
+        return {"scheduler_enabled": False, "last_cycle": None, "recent_cycles": []}

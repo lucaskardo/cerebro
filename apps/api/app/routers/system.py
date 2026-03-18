@@ -24,25 +24,29 @@ async def health():
 
 @router.get("/api/status")
 async def status():
-    budget = await cost_tracker.check_budget()
-    assets = await db.get("content_assets", select="id,status")
-    counts: dict = {}
-    for a in assets:
-        s = a["status"]
-        counts[s] = counts.get(s, 0) + 1
-    today = date.today().isoformat()
-    leads = await db.query("leads", params={"select": "id", "created_at": f"gte.{today}T00:00:00Z"})
-    return {
-        "budget": budget,
-        "content": counts,
-        "leads_today": len(leads),
-        "features": {
-            "auto_publish": config.AUTO_PUBLISH,
-            "demand_engine": config.DEMAND_ENGINE,
-            "autoloop": config.AUTOLOOP,
-            "social_engine": config.SOCIAL_ENGINE,
-        },
-    }
+    try:
+        budget = await cost_tracker.check_budget()
+        assets = await db.get("content_assets", select="id,status")
+        counts: dict = {}
+        for a in assets:
+            s = a["status"]
+            counts[s] = counts.get(s, 0) + 1
+        today = date.today().isoformat()
+        leads = await db.query("leads", params={"select": "id", "created_at": f"gte.{today}T00:00:00Z"})
+        return {
+            "budget": budget,
+            "content": counts,
+            "leads_today": len(leads),
+            "features": {
+                "auto_publish": config.AUTO_PUBLISH,
+                "demand_engine": config.DEMAND_ENGINE,
+                "autoloop": config.AUTOLOOP,
+                "social_engine": config.SOCIAL_ENGINE,
+            },
+        }
+    except Exception as e:
+        logger.error(f"status error: {e}")
+        return {"budget": {}, "content": {}, "leads_today": 0, "features": {}}
 
 
 @router.get("/api/health/business")
@@ -183,9 +187,13 @@ async def get_mission(mid: str):
 
 @router.get("/api/sites")
 async def list_sites():
-    return await db.query("domain_sites", params={
-        "select": "*", "status": "eq.active", "order": "created_at.asc"
-    })
+    try:
+        return await db.query("domain_sites", params={
+            "select": "*", "status": "eq.active", "order": "created_at.asc"
+        })
+    except Exception as e:
+        logger.error(f"list_sites error: {e}")
+        return []
 
 
 @router.get("/api/sites/{sid}")

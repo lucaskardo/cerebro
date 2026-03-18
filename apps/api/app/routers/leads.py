@@ -25,12 +25,16 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
 @router.get("/api/leads")
 async def list_leads(limit: int = 50, site_id: Optional[str] = None,
                      status: Optional[str] = None):
-    params = {"select": "*", "order": "created_at.desc", "limit": str(limit)}
-    if site_id:
-        params["site_id"] = f"eq.{site_id}"
-    if status:
-        params["current_status"] = f"eq.{status}"
-    return await db.query("leads", params=params)
+    try:
+        params = {"select": "*", "order": "created_at.desc", "limit": str(limit)}
+        if site_id:
+            params["site_id"] = f"eq.{site_id}"
+        if status:
+            params["current_status"] = f"eq.{status}"
+        return await db.query("leads", params=params)
+    except Exception as e:
+        logger.error(f"list_leads error: {e}")
+        return []
 
 
 @router.get("/api/leads/{lid}")

@@ -57,16 +57,20 @@ async def _generate_social_drafts_bg(asset_id: str, site_id: str):
 @router.get("/api/content")
 async def list_content(status: Optional[str] = None, limit: int = 50,
                        site_id: Optional[str] = None):
-    params = {
-        "select": "id,title,slug,keyword,status,site_id,quality_score,humanization_score,created_at,updated_at",
-        "order": "created_at.desc",
-        "limit": str(limit),
-    }
-    if status:
-        params["status"] = f"eq.{status}"
-    if site_id:
-        params["site_id"] = f"eq.{site_id}"
-    return await db.query("content_assets", params=params)
+    try:
+        params = {
+            "select": "id,title,slug,keyword,status,site_id,quality_score,humanization_score,created_at,updated_at",
+            "order": "created_at.desc",
+            "limit": str(limit),
+        }
+        if status:
+            params["status"] = f"eq.{status}"
+        if site_id:
+            params["site_id"] = f"eq.{site_id}"
+        return await db.query("content_assets", params=params)
+    except Exception as e:
+        logger.error(f"list_content error: {e}")
+        return []
 
 
 @router.get("/api/content/by-slug/{slug}")

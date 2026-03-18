@@ -311,14 +311,18 @@ async def list_approvals(
     entity_type: Optional[str] = None,
     limit: int = 50,
 ):
-    params = {"select": "*", "order": "created_at.asc", "limit": str(limit)}
-    if status:
-        params["status"] = f"eq.{status}"
-    if site_id:
-        params["site_id"] = f"eq.{site_id}"
-    if entity_type:
-        params["entity_type"] = f"eq.{entity_type}"
-    return await db.query("approvals", params=params)
+    try:
+        params = {"select": "*", "order": "created_at.asc", "limit": str(limit)}
+        if status:
+            params["status"] = f"eq.{status}"
+        if site_id:
+            params["site_id"] = f"eq.{site_id}"
+        if entity_type:
+            params["entity_type"] = f"eq.{entity_type}"
+        return await db.query("approvals", params=params)
+    except Exception as e:
+        logger.error(f"list_approvals error: {e}")
+        return []
 
 
 @router.post("/api/approvals/{aid}/resolve")
