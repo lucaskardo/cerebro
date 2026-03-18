@@ -34,9 +34,20 @@ export default function Sidebar() {
 
   const currentSite = sites.find((s) => s.id === currentSiteId);
 
-  // Fetch sites once on mount
+  // Fetch sites once on mount; restore site_id from localStorage if missing from URL
   useEffect(() => {
     api.sites().then(setSites).catch(() => setSites([]));
+    if (!searchParams.get("site_id")) {
+      try {
+        const stored = localStorage.getItem("cerebro_site_id");
+        if (stored) {
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("site_id", stored);
+          router.replace(`${pathname}?${params.toString()}`);
+        }
+      } catch {}
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch pending approvals count
@@ -55,13 +66,15 @@ export default function Sidebar() {
     return () => clearInterval(interval);
   }, [fetchPending]);
 
-  // Append / replace site_id in the current URL
+  // Append / replace site_id in the current URL and persist to localStorage
   const selectSite = (siteId: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (siteId) {
       params.set("site_id", siteId);
+      try { localStorage.setItem("cerebro_site_id", siteId); } catch {}
     } else {
       params.delete("site_id");
+      try { localStorage.removeItem("cerebro_site_id"); } catch {}
     }
     router.push(`${pathname}?${params.toString()}`);
     setBrandOpen(false);

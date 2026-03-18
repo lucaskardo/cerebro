@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { api, type BusinessHealth, type Status, type Approval, type ContentAsset } from "@/lib/api";
+import { api, reviewContent, type Lead, type Approval, type ContentAsset } from "@/lib/api";
 
 interface CycleRun {
   id: string; status: string;
@@ -17,16 +17,21 @@ const CYCLE_BADGE: Record<string, string> = {
   completed: "badge badge-green", running: "badge badge-blue",
   paused: "badge badge-yellow", failed: "badge badge-red",
 };
-const APPROVAL_BADGE: Record<string, string> = {
-  pending: "badge badge-yellow", approved: "badge badge-green",
-  rejected: "badge badge-red", executed: "badge badge-blue", expired: "badge badge-gray",
-};
 
 function fmt(n: number) { return n.toLocaleString(); }
-function fmtCurrency(n: number) { return `$${n.toFixed(2)}`; }
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+}
+function fmtDateShort(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+}
+function isToday(iso: string) {
+  const d = new Date(iso), n = new Date();
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+}
+function truncate(str: string, max: number) {
+  return str.length > max ? str.slice(0, max) + "…" : str;
 }
 
 function KPICard({ label, value, sub, href, accent = "green" }: {
@@ -53,53 +58,71 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const siteId = searchParams.get("site_id") || "";
 
-  const [health, setHealth] = useState<BusinessHealth | null>(null);
-  const [status, setStatus] = useState<Status | null>(null);
-  const [cycles, setCycles] = useState<CycleRun[]>([]);
-  const [loop, setLoop] = useState<Record<string, unknown> | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [reviewItems, setReviewItems] = useState<ContentAsset[]>([]);
+  const [approvedItems, setApprovedItems] = useState<ContentAsset[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<Approval[]>([]);
-  const [topContent, setTopContent] = useState<ContentAsset[]>([]);
+  const [cycles, setCycles] = useState<CycleRun[]>([]);
+  const [activeExperiments, setActiveExperiments] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
+    const sid = siteId || undefined;
     Promise.allSettled([
-      api.businessHealth(),
-      api.status(),
+      api.leads(sid),
+      api.content("review", sid),
+      api.content("approved", sid),
+      api.approvals("pending", sid),
       api.cycleHistory(5),
-      api.loopStatus(),
-      api.approvals("pending", siteId || undefined),
-      api.content("approved"),
-    ]).then(([h, s, c, l, a, ct]) => {
-      if (h.status === "fulfilled") setHealth(h.value);
-      if (s.status === "fulfilled") setStatus(s.value);
-      if (c.status === "fulfilled") setCycles(c.value as unknown as CycleRun[]);
-      if (l.status === "fulfilled") setLoop(l.value as Record<string, unknown>);
-      if (a.status === "fulfilled") setPendingApprovals(a.value.slice(0, 5));
-      if (ct.status === "fulfilled") setTopContent(ct.value.slice(0, 5));
+      api.experiments(sid ? { site_id: sid } : undefined),
+    ]).then(([l, rev, app, appr, cyc, exp]) => {
+      if (l.status === "fulfilled") setLeads(l.value);
+      if (rev.status === "fulfilled") setReviewItems(rev.value);
+      if (app.status === "fulfilled") setApprovedItems(app.value);
+      if (appr.status === "fulfilled") setPendingApprovals(appr.value.slice(0, 5));
+      if (cyc.status === "fulfilled") setCycles(cyc.value as unknown as CycleRun[]);
+      if (exp.status === "fulfilled") {
+        const expArr = exp.value;
+        setActiveExperiments(expArr.filter((e) => e.status === "running").length);
+      }
       setLoading(false);
     });
   }, [siteId]);
 
-  const leadsToday     = health?.leads_today            ?? status?.leads_today ?? 0;
-  const leadsWeek      = health?.leads_this_week         ?? 0;
-  const costToday      = health?.cost_today              ?? status?.budget?.spent ?? 0;
-  const budgetRemaining = health?.budget_remaining       ?? status?.budget?.remaining ?? 0;
-  const articlesWeek   = health?.articles_published_week ?? 0;
-  const errorRate      = health?.error_rate_24h           ?? 0;
-  const budgetWarning  = health?.budget_warning           ?? status?.budget?.warning ?? false;
-  const schedulerEnabled = (loop?.scheduler_enabled as boolean) ?? false;
-  const lastCycleAt    = (loop?.last_cycle_at as string | null) ?? null;
-  const lastCycleStatus = (loop?.last_cycle_status as string | null) ?? null;
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  async function approveInline(item: ContentAsset) {
+    setApproving((prev) => ({ ...prev, [item.id]: true }));
+    try {
+      await reviewContent(item.id, "approve");
+      setReviewItems((prev) => prev.filter((i) => i.id !== item.id));
+      setApprovedItems((prev) => [{ ...item, status: "approved" }, ...prev]);
+      showToast(`✓ "${truncate(item.title, 40)}" aprobado`);
+    } catch {
+      showToast(`✗ Error al aprobar`);
+    } finally {
+      setApproving((prev) => ({ ...prev, [item.id]: false }));
+    }
+  }
+
+  const leadsToday = leads.filter((l) => isToday(l.created_at)).length;
+  const recentLeads = [...leads].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5);
+  const siteSuffix = siteId ? `?site_id=${siteId}` : "";
 
   if (loading) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
         <div><div className="skeleton" style={{ height: "2rem", width: "260px", marginBottom: "0.5rem" }} /><div className="skeleton" style={{ height: "1rem", width: "300px" }} /></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.875rem" }}>
-          {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "0.875rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.875rem" }}>
           <SkeletonCard /><SkeletonCard />
         </div>
       </div>
@@ -108,115 +131,156 @@ function DashboardContent() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: "1.5rem", right: "1.5rem", zIndex: 200,
+          padding: "0.625rem 1rem", borderRadius: "8px", fontSize: "0.8125rem", fontWeight: 500,
+          background: toast.startsWith("✓") ? "var(--dash-accent)" : "var(--dash-danger)",
+          color: "#fff", boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+        }}>
+          {toast}
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
         <div>
           <h1 className="page-title">Business Health</h1>
-          <p style={{ fontSize: "0.8125rem", color: "var(--dash-text-dim)", marginTop: "0.3rem" }}>Real-time demand generation overview</p>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dash-text-dim)", marginTop: "0.3rem" }}>
+            {siteId ? "Métricas del sitio seleccionado" : "Visión general de todos los sitios"}
+          </p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <Link href="/dashboard/intelligence" className="btn-primary" style={{ fontSize: "0.75rem", padding: "0.4rem 0.875rem" }}>▶ Run Cycle Now</Link>
-          <Link href="/dashboard/experiments" className="btn-secondary" style={{ fontSize: "0.75rem", padding: "0.4rem 0.875rem" }}>+ New Experiment</Link>
+          <Link href={`/dashboard/content${siteSuffix}`} className="btn-primary" style={{ fontSize: "0.75rem", padding: "0.4rem 0.875rem" }}>+ Generar contenido</Link>
+          {pendingApprovals.length > 0 && (
+            <Link href={`/dashboard/approvals${siteSuffix}`} className="btn-secondary" style={{ fontSize: "0.75rem", padding: "0.4rem 0.875rem" }}>
+              Aprobar pendientes ({pendingApprovals.length})
+            </Link>
+          )}
+          <Link href={`/dashboard/leads${siteSuffix}`} className="btn-secondary" style={{ fontSize: "0.75rem", padding: "0.4rem 0.875rem" }}>Ver leads</Link>
         </div>
       </div>
 
       {/* KPI cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.875rem" }}>
-        <KPICard label="Leads Today"       value={fmt(leadsToday)}              href="/dashboard/leads"   accent="green" />
-        <KPICard label="Leads This Week"   value={fmt(leadsWeek)}               href="/dashboard/leads"   accent="green" />
-        <KPICard label="Cost Today"        value={fmtCurrency(costToday)}       href="/dashboard/system"  accent={budgetWarning ? "yellow" : "green"} />
-        <KPICard label="Budget Remaining"  value={fmtCurrency(budgetRemaining)} href="/dashboard/system"  accent={budgetRemaining < 5 ? "red" : "green"} />
-        <KPICard label="Articles / Week"   value={fmt(articlesWeek)}            href="/dashboard/content" accent="green" />
-        <KPICard label="Error Rate 24h"    value={`${errorRate}%`}              href="/dashboard/system"  accent={errorRate > 20 ? "red" : errorRate > 5 ? "yellow" : "green"} />
+        <KPICard
+          label="Leads hoy"
+          value={fmt(leadsToday)}
+          sub={`${fmt(leads.length)} total`}
+          href={`/dashboard/leads${siteSuffix}`}
+          accent={leadsToday > 0 ? "green" : "dim"}
+        />
+        <KPICard
+          label="En revisión"
+          value={fmt(reviewItems.length)}
+          sub="pendientes de aprobar"
+          href={`/dashboard/content?status=review${siteId ? `&site_id=${siteId}` : ""}`}
+          accent={reviewItems.length > 0 ? "yellow" : "dim"}
+        />
+        <KPICard
+          label="Publicados"
+          value={fmt(approvedItems.length)}
+          sub="artículos aprobados"
+          href={`/dashboard/content?status=approved${siteId ? `&site_id=${siteId}` : ""}`}
+          accent="green"
+        />
+        <KPICard
+          label="Experiments activos"
+          value={fmt(activeExperiments)}
+          href={`/dashboard/experiments${siteSuffix}`}
+          accent={activeExperiments > 0 ? "blue" : "dim"}
+        />
       </div>
 
-      {/* Loop status + trend placeholder */}
-      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "0.875rem" }}>
-        <div className="dash-card" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <h2 className="section-title" style={{ fontSize: "0.875rem" }}>Strategy Loop</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Scheduler</span>
-              <span className={schedulerEnabled ? "badge badge-green" : "badge badge-gray"}>{schedulerEnabled ? "on" : "off"}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Last Cycle</span>
-              {lastCycleStatus ? <span className={CYCLE_BADGE[lastCycleStatus] ?? "badge badge-gray"}>{lastCycleStatus}</span> : <span className="badge badge-gray">none</span>}
-            </div>
-            <div>
-              <span style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Last Run</span>
-              <p className="mono" style={{ fontSize: "0.7rem", color: "var(--dash-text)", marginTop: "0.15rem" }}>{fmtDate(lastCycleAt)}</p>
-            </div>
-          </div>
-          <Link href="/dashboard/intelligence" className="btn-secondary" style={{ alignSelf: "flex-start", marginTop: "auto", fontSize: "0.75rem", padding: "0.35rem 0.75rem" }}>Intelligence →</Link>
-        </div>
-        <div className="dash-card" style={{ display: "flex", flexDirection: "column" }}>
-          <h2 className="section-title" style={{ fontSize: "0.875rem", marginBottom: "0.75rem" }}>Lead Trend — 30 days</h2>
-          <div style={{ flex: 1, minHeight: "120px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--dash-bg)", borderRadius: "6px", border: "1px dashed var(--dash-border)" }}>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "1.5rem", opacity: 0.3 }}>📈</div>
-              <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", marginTop: "0.4rem" }}>Chart integration — connect to attribution events</div>
-              <Link href="/dashboard/attribution" style={{ fontSize: "0.7rem", color: "var(--dash-accent)", marginTop: "0.5rem", display: "block" }}>View Attribution →</Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Top assets + Pending approvals */}
+      {/* Review queue + Recent leads */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.875rem" }}>
-        <div className="dash-card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.875rem" }}>
-            <h2 className="section-title" style={{ fontSize: "0.875rem" }}>Top Assets</h2>
-            <Link href="/dashboard/content" style={{ fontSize: "0.7rem", color: "var(--dash-accent)" }}>All →</Link>
-          </div>
-          {topContent.length === 0 ? (
-            <p style={{ fontSize: "0.8125rem", color: "var(--dash-text-dim)", padding: "1rem 0" }}>No published content yet.</p>
-          ) : (
-            <table className="dash-table">
-              <thead><tr><th>Title</th><th style={{ textAlign: "right" }}>Score</th></tr></thead>
-              <tbody>
-                {topContent.map((a) => (
-                  <tr key={a.id}>
-                    <td style={{ maxWidth: "200px" }}>
-                      <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--dash-text)" }}>{a.title}</span>
-                    </td>
-                    <td className="mono" style={{ textAlign: "right", color: "var(--dash-accent)" }}>{a.quality_score ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
 
+        {/* Articles pending review */}
         <div className="dash-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.875rem" }}>
             <h2 className="section-title" style={{ fontSize: "0.875rem" }}>
-              Pending Approvals
-              {pendingApprovals.length > 0 && (
-                <span style={{ marginLeft: "0.5rem", background: "var(--dash-danger)", color: "#fff", fontSize: "0.625rem", fontWeight: 700, padding: "0.1rem 0.35rem", borderRadius: "8px", fontFamily: "'JetBrains Mono', monospace" }}>
-                  {pendingApprovals.length}
+              Pendientes de revisión
+              {reviewItems.length > 0 && (
+                <span style={{ marginLeft: "0.5rem", background: "var(--dash-warn)", color: "#fff", fontSize: "0.625rem", fontWeight: 700, padding: "0.1rem 0.35rem", borderRadius: "8px", fontFamily: "'JetBrains Mono', monospace" }}>
+                  {reviewItems.length}
                 </span>
               )}
             </h2>
-            <Link href="/dashboard/approvals" style={{ fontSize: "0.7rem", color: "var(--dash-accent)" }}>All →</Link>
+            <Link href={`/dashboard/content?status=review${siteId ? `&site_id=${siteId}` : ""}`} style={{ fontSize: "0.7rem", color: "var(--dash-accent)" }}>Todos →</Link>
           </div>
-          {pendingApprovals.length === 0 ? (
+          {reviewItems.length === 0 ? (
             <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
               <div style={{ fontSize: "1.5rem", opacity: 0.3, marginBottom: "0.5rem" }}>✓</div>
-              <p style={{ fontSize: "0.8125rem", color: "var(--dash-text-dim)" }}>All caught up!</p>
+              <p style={{ fontSize: "0.8125rem", color: "var(--dash-text-dim)" }}>Sin artículos pendientes.</p>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-              {pendingApprovals.map((a) => (
-                <div key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", padding: "0.5rem 0.625rem", background: "var(--dash-bg)", borderRadius: "6px", border: "1px solid var(--dash-border)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {reviewItems.slice(0, 5).map((item) => (
+                <div key={item.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0.625rem", background: "var(--dash-bg)", borderRadius: "6px", border: "1px solid var(--dash-border)" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "0.75rem", color: "var(--dash-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.action}</div>
-                    <div style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)" }}>{a.entity_type} · {fmtDate(a.created_at)}</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--dash-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500 }}>
+                      {truncate(item.title, 45)}
+                    </div>
+                    <div style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
+                      {item.keyword} · {item.quality_score != null ? `${item.quality_score}/100` : "sin score"}
+                    </div>
                   </div>
-                  <span className={APPROVAL_BADGE[a.status] ?? "badge badge-gray"}>{a.status}</span>
+                  <button
+                    disabled={approving[item.id]}
+                    onClick={() => approveInline(item)}
+                    style={{
+                      padding: "0.25rem 0.625rem", borderRadius: "6px", fontSize: "0.6875rem",
+                      fontWeight: 600, border: "1px solid var(--dash-accent)",
+                      background: "var(--dash-accent-dim)", color: "var(--dash-accent)",
+                      cursor: approving[item.id] ? "not-allowed" : "pointer",
+                      flexShrink: 0, opacity: approving[item.id] ? 0.6 : 1,
+                    }}
+                  >
+                    {approving[item.id] ? "…" : "Aprobar"}
+                  </button>
                 </div>
               ))}
-              <Link href="/dashboard/approvals" className="btn-primary" style={{ textAlign: "center", marginTop: "0.25rem", fontSize: "0.75rem", padding: "0.4rem 0.875rem" }}>Review All →</Link>
+              {reviewItems.length > 5 && (
+                <Link href={`/dashboard/content?status=review${siteId ? `&site_id=${siteId}` : ""}`} className="btn-secondary" style={{ textAlign: "center", fontSize: "0.75rem", padding: "0.4rem 0.875rem" }}>
+                  Ver {reviewItems.length - 5} más →
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Recent leads */}
+        <div className="dash-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.875rem" }}>
+            <h2 className="section-title" style={{ fontSize: "0.875rem" }}>Últimos leads</h2>
+            <Link href={`/dashboard/leads${siteSuffix}`} style={{ fontSize: "0.7rem", color: "var(--dash-accent)" }}>Todos →</Link>
+          </div>
+          {recentLeads.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
+              <div style={{ fontSize: "1.5rem", opacity: 0.3, marginBottom: "0.5rem" }}>◎</div>
+              <p style={{ fontSize: "0.8125rem", color: "var(--dash-text-dim)" }}>Sin leads todavía.</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+              {recentLeads.map((lead) => (
+                <div key={lead.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", padding: "0.5rem 0.625rem", background: "var(--dash-bg)", borderRadius: "6px", border: "1px solid var(--dash-border)" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="mono" style={{ fontSize: "0.75rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--dash-text)" }}>
+                      {lead.email}
+                    </div>
+                    <div style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)" }}>
+                      {lead.utm_source || "directo"} · {lead.tema_interes ? truncate(lead.tema_interes, 28) : "—"}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
+                    <span className={lead.intent_score >= 7 ? "badge badge-green" : lead.intent_score >= 4 ? "badge badge-yellow" : "badge badge-gray"} style={{ fontSize: "0.6875rem" }}>
+                      {lead.intent_score}/10
+                    </span>
+                    <span className="mono" style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)" }}>{fmtDateShort(lead.created_at)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -225,17 +289,26 @@ function DashboardContent() {
       {/* Recent cycles */}
       <div className="dash-card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-          <h2 className="section-title" style={{ fontSize: "0.875rem" }}>Recent Cycles</h2>
-          <Link href="/dashboard/intelligence" style={{ fontSize: "0.7rem", color: "var(--dash-accent)" }}>All →</Link>
+          <h2 className="section-title" style={{ fontSize: "0.875rem" }}>Ciclos recientes</h2>
+          <Link href="/dashboard/intelligence" style={{ fontSize: "0.7rem", color: "var(--dash-accent)" }}>Intelligence →</Link>
         </div>
         {cycles.length === 0 ? (
           <div style={{ textAlign: "center", padding: "1.5rem 0", color: "var(--dash-text-dim)", fontSize: "0.8125rem" }}>
-            No cycles yet. <span className="mono" style={{ fontSize: "0.75rem" }}>POST /api/loop/run</span> to start.
+            No hay ciclos. <span className="mono" style={{ fontSize: "0.75rem" }}>POST /api/loop/run</span> para iniciar.
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table className="dash-table">
-              <thead><tr><th>Started</th><th>Status</th><th style={{ textAlign: "right" }}>Opps</th><th style={{ textAlign: "right" }}>Experiments</th><th style={{ textAlign: "right" }}>Auto-Run</th><th style={{ textAlign: "right" }}>Queued</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Iniciado</th>
+                  <th>Estado</th>
+                  <th style={{ textAlign: "right" }}>Opps</th>
+                  <th style={{ textAlign: "right" }}>Experiments</th>
+                  <th style={{ textAlign: "right" }}>Auto-Run</th>
+                  <th style={{ textAlign: "right" }}>En cola</th>
+                </tr>
+              </thead>
               <tbody>
                 {cycles.map((c) => (
                   <tr key={c.id}>

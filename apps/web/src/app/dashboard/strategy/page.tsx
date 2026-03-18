@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import type { Goal, Strategy } from "@/lib/api";
+import type { Goal, Strategy, Site } from "@/lib/api";
 import { api } from "@/lib/api";
 
 const GOAL_STATUS_BADGE: Record<string, string> = {
@@ -26,16 +26,24 @@ function StrategyContent() {
   const siteId = searchParams.get("site_id") || "";
   const [goals, setGoals] = useState<Goal[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    Promise.allSettled([api.goals(), api.strategies()]).then(([g, s]) => {
+    Promise.allSettled([
+      api.goals(siteId || undefined),
+      api.strategies(undefined, siteId || undefined),
+      api.sites(),
+    ]).then(([g, s, si]) => {
       if (g.status === "fulfilled") setGoals(g.value);
       if (s.status === "fulfilled") setStrategies(s.value);
+      if (si.status === "fulfilled") setSites(si.value);
       setLoading(false);
     });
   }, [siteId]);
+
+  const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.brand_name || s.domain]));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
@@ -72,6 +80,11 @@ function StrategyContent() {
                       <p style={{ fontWeight: 600, fontSize: "0.875rem", color: "var(--dash-text)", lineHeight: 1.4 }}>{goal.description}</p>
                       <p style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", marginTop: "0.25rem" }}>
                         <span className="mono">{goal.target_metric}</span> · <span className="mono">{goal.current_value} / {goal.target_value}</span>
+                        {!siteId && goal.site_id && (
+                          <span className="badge badge-gray" style={{ marginLeft: "0.5rem", fontSize: "0.6875rem" }}>
+                            {siteMap[goal.site_id] ?? goal.site_id.slice(0, 8) + "…"}
+                          </span>
+                        )}
                       </p>
                     </div>
                     <span className={GOAL_STATUS_BADGE[goal.status] ?? "badge badge-gray"} style={{ flexShrink: 0 }}>{goal.status}</span>
@@ -110,16 +123,19 @@ function StrategyContent() {
             </div>
           ) : (
             <table className="dash-table">
-              <thead><tr><th>Nombre</th><th>Canal</th><th>Est. Leads</th><th>Confianza</th><th>Estado</th><th>Creado</th></tr></thead>
+              <thead><tr><th>Nombre</th>{!siteId && <th>Brand</th>}<th>Canal</th><th>Est. Leads</th><th>Confianza</th><th>Estado</th><th>Creado</th></tr></thead>
               <tbody>
                 {strategies.map((s) => {
                   const confColor = s.confidence_score >= 70 ? "var(--dash-accent)" : s.confidence_score >= 40 ? "#f59e0b" : "#ff4d4d";
                   return (
                     <tr key={s.id}>
-                      <td style={{ maxWidth: "260px" }}>
+                      <td style={{ maxWidth: "240px" }}>
                         <div style={{ fontWeight: 500, color: "var(--dash-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.name}>{s.name}</div>
                         {s.description && <div style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.description}>{s.description}</div>}
                       </td>
+                      {!siteId && (
+                        <td><span className="badge badge-gray" style={{ fontSize: "0.6875rem" }}>{s.site_id ? (siteMap[s.site_id] ?? s.site_id.slice(0, 8) + "…") : "—"}</span></td>
+                      )}
                       <td><span className={CHANNEL_BADGE[s.channel] ?? "badge badge-gray"}>{s.channel}</span></td>
                       <td><span className="mono" style={{ fontWeight: 600, color: "var(--dash-accent)" }}>{s.estimated_leads}</span></td>
                       <td><span className="mono" style={{ fontWeight: 600, color: confColor }}>{s.confidence_score}%</span></td>

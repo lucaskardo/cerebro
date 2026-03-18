@@ -32,6 +32,7 @@ export interface ContentAsset {
   status: "generating" | "draft" | "review" | "approved" | "error";
   quality_score: number | null;
   humanization_score: number | null;
+  site_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -92,6 +93,7 @@ export interface Site {
 
 export interface Goal {
   id: string;
+  site_id: string | null;
   description: string;
   target_metric: string;
   target_value: number;
@@ -103,6 +105,7 @@ export interface Goal {
 export interface Strategy {
   id: string;
   goal_id: string;
+  site_id: string | null;
   name: string;
   description: string;
   channel: string;
@@ -342,15 +345,26 @@ export interface Approval {
 export const api = {
   status: () => fetchAPI<Status>("/api/status"),
   budget: () => fetchAPI<Budget>("/api/budget"),
-  content: (status?: string) =>
-    fetchAPI<ContentAsset[]>(`/api/content${status ? `?status=${status}` : ""}`),
+  content: (status?: string, siteId?: string) => {
+    const q = new URLSearchParams();
+    if (status) q.set("status", status);
+    if (siteId) q.set("site_id", siteId);
+    return fetchAPI<ContentAsset[]>(`/api/content${q.toString() ? `?${q}` : ""}`);
+  },
   contentItem: (id: string) => fetchAPI<ArticleFull>(`/api/content/${id}`),
   contentBySlug: (slug: string) => fetchAPI<ArticleFull>(`/api/content/by-slug/${slug}`),
   sitemap: () => fetchAPI<Array<{ slug: string; updated_at: string }>>("/api/sitemap"),
-  leads: () => fetchAPI<Lead[]>("/api/leads"),
+  leads: (siteId?: string) =>
+    fetchAPI<Lead[]>(`/api/leads${siteId ? `?site_id=${siteId}` : ""}`),
   alerts: () => fetchAPI<Alert[]>("/api/alerts"),
-  goals: () => fetchAPI<Goal[]>("/api/goals"),
-  strategies: (goalId?: string) => fetchAPI<Strategy[]>(`/api/strategies${goalId ? `?goal_id=${goalId}` : ""}`),
+  goals: (siteId?: string) =>
+    fetchAPI<Goal[]>(`/api/goals${siteId ? `?site_id=${siteId}` : ""}`),
+  strategies: (goalId?: string, siteId?: string) => {
+    const q = new URLSearchParams();
+    if (goalId) q.set("goal_id", goalId);
+    if (siteId) q.set("site_id", siteId);
+    return fetchAPI<Strategy[]>(`/api/strategies${q.toString() ? `?${q}` : ""}`);
+  },
   funnel: (days = 30) => fetchAPI<Funnel>(`/api/attribution/funnel?days=${days}`),
   funnelNew: (days = 30, siteId?: string) =>
     fetchAPI<Funnel>(`/api/reports/funnel?days=${days}${siteId ? `&site_id=${siteId}` : ""}`),
@@ -368,7 +382,7 @@ export const api = {
   sites: () => fetchAPI<Site[]>("/api/sites"),
   relatedContent: (limit = 5) => fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
   contentBySite: (siteId: string, limit = 20) =>
-    fetchAPI<ContentAsset[]>(`/api/content?status=approved&limit=${limit}`),
+    fetchAPI<ContentAsset[]>(`/api/content?status=approved&site_id=${siteId}&limit=${limit}`),
   personas: (siteId?: string) =>
     fetchAPI<Persona[]>(`/api/personas${siteId ? `?site_id=${siteId}` : ""}`),
   personaIdentities: (personaId: string) =>
@@ -431,6 +445,16 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
   if (API_KEY) h["x-api-key"] = API_KEY;
   return { ...h, ...extra };
+}
+
+export async function reviewContent(id: string, action: "approve" | "reject", notes?: string): Promise<{ status: string }> {
+  const res = await fetch(`${API_URL}/api/content/${id}/review`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ action, notes }),
+  });
+  if (!res.ok) throw new Error(`Review failed: ${res.status}`);
+  return res.json();
 }
 
 export async function approveStrategy(id: string): Promise<Strategy> {

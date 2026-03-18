@@ -28,7 +28,7 @@ function LeadsContent() {
 
   useEffect(() => {
     setLoading(true);
-    api.leads().then((data) => { setLeads(data); setLoading(false); })
+    api.leads(siteId || undefined).then((data) => { setLeads(data); setLoading(false); })
       .catch((e) => { setError(String(e)); setLoading(false); });
   }, [siteId]);
 
