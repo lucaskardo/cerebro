@@ -121,7 +121,7 @@ async def list_experiments(
     opportunity_id: Optional[str] = None,
 ):
     try:
-        params = {"select": "*", "order": "created_at.desc", "limit": "50"}
+        params = {"select": "*", "order": "started_at.desc", "limit": "50"}
         if site_id:
             params["site_id"] = f"eq.{site_id}"
         if status:

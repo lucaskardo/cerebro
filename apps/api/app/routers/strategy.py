@@ -109,8 +109,8 @@ async def create_knowledge(body: dict, request: Request, _auth=Depends(require_a
 @router.get("/api/knowledge/insights")
 async def top_insights(site_id: Optional[str] = None, limit: int = 10):
     params = {
-        "select": "*", "confidence": "eq.high",
-        "order": "sample_size.desc", "limit": str(limit),
+        "select": "*", "confidence": "gte.0.7",
+        "order": "confidence.desc", "limit": str(limit),
     }
     if site_id:
         params["site_id"] = f"eq.{site_id}"

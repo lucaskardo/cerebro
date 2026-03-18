@@ -186,7 +186,7 @@ async def funnel_report(site_id: Optional[str] = None, days: int = 30):
         from datetime import date, timedelta
         since = (date.today() - timedelta(days=days)).isoformat()
 
-        visitors_q = {"select": "id", "created_at": f"gte.{since}T00:00:00Z"}
+        visitors_q = {"select": "id", "first_seen": f"gte.{since}T00:00:00Z"}
         sessions_q = {"select": "id", "started_at": f"gte.{since}T00:00:00Z"}
         leads_q = {"select": "id,current_status", "created_at": f"gte.{since}T00:00:00Z"}
 
