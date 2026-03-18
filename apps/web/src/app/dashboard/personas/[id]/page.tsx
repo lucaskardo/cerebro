@@ -207,10 +207,10 @@ export default function PersonaDetailPage() {
                       </span>
                     </td>
                     <td className="mono" style={{ fontSize: "0.75rem" }}>{identity.handle_or_email ?? "—"}</td>
-                    <td style={{ fontSize: "0.8125rem" }}>{(identity as Record<string, string>)["display_name"] ?? "—"}</td>
+                    <td style={{ fontSize: "0.8125rem" }}>{(identity as unknown as Record<string, string>)["display_name"] ?? "—"}</td>
                     <td>
-                      <span className={(identity as Record<string, string>)["status"] === "active" ? "badge badge-green" : "badge badge-gray"}>
-                        {(identity as Record<string, string>)["status"] ?? "—"}
+                      <span className={identity.status === "active" ? "badge badge-green" : "badge badge-gray"}>
+                        {identity.status ?? "—"}
                       </span>
                     </td>
                     <td className="mono" style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)" }}>
