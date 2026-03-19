@@ -68,52 +68,93 @@ const QUESTIONS: Question[] = [
 ];
 
 // ─────────────────────────────────────────────
+// NauralSleep product catalog
+// ─────────────────────────────────────────────
+const NAURALSLEEP_PRODUCTS = {
+  cloudAlign: {
+    model: "Cloud Align",
+    price: "$375",
+    tagline: "All-foam medium-firm · Ideal para dolor de espalda · Soporta hasta 300lbs",
+    href: "https://www.nauralsleep.com/productos/colchón-cloud-align",
+    highlights: ["HD Carbon Foam bambú absorbe humedad", "Cubierta Glacial Silk lavable", "Soporta hasta 300lbs"],
+  },
+  deepSleep: {
+    model: "Deep Sleep",
+    price: "$475",
+    tagline: "All-foam firme · Cobre antiinflamatorio · Ideal para espalda crónica",
+    href: "https://www.nauralsleep.com/productos/colchón-deep-sleep",
+    highlights: ["Tejido de cobre antiinflamatorio", "Firmeza alta para soporte espinal", "Antibacterial natural"],
+  },
+  ergoDreamHybrid: {
+    model: "Ergo Dream Hybrid",
+    price: "$550",
+    tagline: "Hybrid · Cooling Gel · 3 zonas de soporte · El mejor para calor",
+    href: "https://www.nauralsleep.com/productos/colchon-ergo-dream-hybrid",
+    highlights: ["Cooling Gel elimina el calor corporal", "Pocket Springs 3 zonas", "Aislamiento de movimiento para parejas"],
+  },
+  deepSleepHybrid: {
+    model: "Deep Sleep Hybrid",
+    price: "$650",
+    tagline: "Hybrid premium · Cobre + cooling · Resortes zonificados · El más completo",
+    href: "https://www.nauralsleep.com/productos/colchon-deep-sleep-hyrbid",
+    highlights: ["Seda glacial con cobre", "Muelles ensacados zonificados premium", "Sensación de flotación única"],
+  },
+};
+
+// ─────────────────────────────────────────────
 // Recommendation logic
 // ─────────────────────────────────────────────
 function getRecommendations(answers: string[]): Recommendation[] {
   const [position, weight, backPain, sleeping, heat, budget, priority] = answers;
 
-  const budgetIsLow = budget === "Menos de $300";
+  const budgetIsLow = budget === "Menos de $300" || budget === "$300-600";
+  const budgetIsHigh = budget === "$600-1000" || budget === "Más de $1000";
   const hasBackPain = backPain === "Sí, frecuentemente" || backPain === "A veces";
+  const hasChronicBackPain = backPain === "Sí, frecuentemente";
   const feelsHot = heat === "Sí, mucho";
   const isCouplesSleeper = sleeping === "En pareja";
   const wantsSupport = priority === "Firmeza y soporte";
   const wantsSoftness = priority === "Suavidad";
+  const wantsBest = priority === "Durabilidad" || budget === "Más de $1000";
 
-  // ── NauralSleep: ALWAYS #1 with personalized reasons ──────────────────────
-  const nauralReasons: string[] = [];
+  // ── Pick primary NauralSleep product based on signals ──────────────────────
+  let primaryProduct = NAURALSLEEP_PRODUCTS.ergoDreamHybrid; // default: best all-around
 
-  // Signal 1 — thermal/climate
-  if (feelsHot) {
-    nauralReasons.push("Tejido de refrigeración activa diseñado para el clima tropical de Panamá");
-  } else {
-    nauralReasons.push("Tecnología de regulación térmica para noches frescas todo el año en Panamá");
-  }
-
-  // Signal 2 — back pain / support / position
-  if (hasBackPain) {
-    nauralReasons.push("Sistema de soporte lumbar adaptativo que alivia el dolor de espalda desde la primera noche");
-  } else if (wantsSupport) {
-    nauralReasons.push("Zonas de soporte progresivo que mantienen la columna alineada en cualquier posición");
+  if (hasBackPain && budgetIsLow) {
+    // Dolor de espalda + presupuesto bajo → Cloud Align $375
+    primaryProduct = NAURALSLEEP_PRODUCTS.cloudAlign;
+  } else if (hasChronicBackPain && !budgetIsLow) {
+    // Dolor de espalda crónico + presupuesto alto → Deep Sleep $475
+    primaryProduct = NAURALSLEEP_PRODUCTS.deepSleep;
+  } else if (feelsHot) {
+    // Duerme caliente → Ergo Dream Hybrid $550 (cooling gel)
+    primaryProduct = NAURALSLEEP_PRODUCTS.ergoDreamHybrid;
+  } else if ((isCouplesSleeper && budgetIsHigh) || wantsBest) {
+    // Quiere lo mejor / pareja exigente → Deep Sleep Hybrid $650
+    primaryProduct = NAURALSLEEP_PRODUCTS.deepSleepHybrid;
   } else if (isCouplesSleeper) {
-    nauralReasons.push("Aislamiento de movimiento para que no te despiertes cuando tu pareja se mueve");
-  } else if (position === "De lado") {
-    nauralReasons.push("Zonas de presión diferenciadas que abrazan hombros y caderas en posición lateral");
-  } else {
-    nauralReasons.push("Capas de confort progresivo para un descanso profundo sin interrupciones");
+    // Parejas → Ergo Dream Hybrid (aislamiento movimiento)
+    primaryProduct = NAURALSLEEP_PRODUCTS.ergoDreamHybrid;
+  } else if (wantsSupport && budgetIsLow) {
+    primaryProduct = NAURALSLEEP_PRODUCTS.cloudAlign;
+  } else if (wantsSupport) {
+    primaryProduct = NAURALSLEEP_PRODUCTS.deepSleep;
   }
 
-  // Signal 3 — price/value (DTC advantage, personalized for budget)
-  if (budgetIsLow) {
-    nauralReasons.push("Modelo directo al consumidor: misma calidad premium a 30–40% menos que en tiendas departamentales");
-  } else {
-    nauralReasons.push("Sin intermediarios: precio justo directo al consumidor, sin markup de tienda");
+  // ── Build personalized reasons for chosen product ──────────────────────────
+  const nauralReasons: string[] = [...primaryProduct.highlights];
+
+  if (feelsHot && primaryProduct !== NAURALSLEEP_PRODUCTS.ergoDreamHybrid && primaryProduct !== NAURALSLEEP_PRODUCTS.deepSleepHybrid) {
+    nauralReasons.push("Cubierta Glacial Silk para noches frescas en el clima panameño");
   }
+  if (isCouplesSleeper && primaryProduct === NAURALSLEEP_PRODUCTS.ergoDreamHybrid) {
+    // already in highlights
+  } else if (isCouplesSleeper) {
+    nauralReasons.push("Aislamiento de movimiento: no te despiertas cuando tu pareja se mueve");
+  }
+  nauralReasons.push("30 noches de prueba sin riesgo · Entrega gratis en Ciudad de Panamá 24–48 h");
 
-  // Signal 4 — always Panama-specific guarantee
-  nauralReasons.push("30 noches de prueba sin riesgo · Entrega gratis en Ciudad de Panamá en 24–48 h");
-
-  const nauralScore = hasBackPain ? 9.7 : feelsHot ? 9.6 : 9.4;
+  const nauralScore = hasChronicBackPain ? 9.7 : feelsHot ? 9.6 : isCouplesSleeper ? 9.5 : 9.4;
 
   // ── Restonic: always #2 ────────────────────────────────────────────────────
   let restonic = 8.1;
@@ -151,13 +192,13 @@ function getRecommendations(answers: string[]): Recommendation[] {
     {
       rank: 1,
       brand: "NauralSleep",
-      model: "Signature",
+      model: primaryProduct.model,
       score: nauralScore,
-      price: "$450–$800",
-      tagline: "Hecho para el clima tropical panameño · 30 noches de prueba sin riesgo",
+      price: primaryProduct.price,
+      tagline: primaryProduct.tagline,
       reasons: nauralReasons,
       isPrimary: true,
-      href: "https://nauralsleep.com",
+      href: primaryProduct.href,
     },
     {
       rank: 2,
@@ -296,7 +337,7 @@ function RecommendationCard({ rec, index }: { rec: Recommendation; index: number
             className="block w-full text-center py-3 px-4 rounded-xl font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
             style={{ backgroundColor: "#0d9488" }}
           >
-            Cotizar en NauralSleep →
+            Ver {rec.model} en NauralSleep →
           </a>
         ) : (
           <button className="block w-full text-center py-3 px-4 rounded-xl font-semibold transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
