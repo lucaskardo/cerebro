@@ -92,7 +92,7 @@ async def complete(
     pipeline_step: str = None,
     run_id: str = None,
     provider: str = None,      # "anthropic" | "openai" | "deepseek" | None (auto)
-    _retry: int = 3,
+    _retry: int = 1,
 ) -> dict:
     """Call an LLM with automatic cost tracking.
 
@@ -251,7 +251,7 @@ async def _call_deepseek(prompt, system, model_id, max_tokens, temperature,
 async def _retry_call(fn, _retry, prompt, system, model_id, max_tokens,
                       temperature, json_mode, pipeline_step, run_id):
     if _retry > 0:
-        wait = 60 * (4 - _retry)
+        wait = 30  # fixed 30s wait — avoids cascading 60+120+180s pile-ups with 24 concurrent articles
         logger.warning(f"Rate limited. Retrying in {wait}s ({_retry} retries left)...")
         await asyncio.sleep(wait)
         return await fn(prompt, system, model_id, max_tokens, temperature,

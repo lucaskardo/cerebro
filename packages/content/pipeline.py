@@ -4,6 +4,7 @@ keyword → research → brief → draft → humanize → validate → publish
 """
 import json
 import re
+import time
 import uuid
 from typing import Optional
 from urllib.parse import urlencode
@@ -123,9 +124,13 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         await db.update("content_assets", asset_id, {"status": "generating"})
 
     try:
+        _pipeline_start = time.time()
+
         # STEP 0: Research
+        _t = time.time()
         logger.info(f"[{run_id}] Step 0/4: Researching keyword...")
         research = await _research_keyword(keyword, brand, run_id)
+        logger.info(f"[{run_id}] Step 0 done in {time.time()-_t:.1f}s")
         conversion_plan = {
             "primary_cta": research.get("primary_cta", ""),
             "secondary_cta": research.get("secondary_cta", ""),
@@ -138,21 +143,27 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         })
 
         # STEP 1: Brief
+        _t = time.time()
         logger.info(f"[{run_id}] Step 1/4: Generating brief...")
         brief = await _generate_brief(keyword, brand, research, run_id)
+        logger.info(f"[{run_id}] Step 1 done in {time.time()-_t:.1f}s")
         await db.update("content_assets", asset_id, {"brief": brief})
 
         # STEP 1.5: Source-verified research
+        _t = time.time()
         logger.info(f"[{run_id}] Step 1.5/4: Fetching verified sources...")
         try:
             sources = await _research_sources(keyword, brand.get("country", ""), run_id)
+            logger.info(f"[{run_id}] Step 1.5 done in {time.time()-_t:.1f}s")
         except Exception as e:
             logger.warning(f"[{run_id}] Source research failed (non-fatal): {e}")
             sources = []
 
         # STEP 2: Draft
+        _t = time.time()
         logger.info(f"[{run_id}] Step 2/4: Writing draft...")
         draft = await _generate_draft(brief, brand, run_id, sources=sources)
+        logger.info(f"[{run_id}] Step 2 done in {time.time()-_t:.1f}s")
         await db.update("content_assets", asset_id, {
             "title": draft.get("title", keyword),
             "meta_description": draft.get("meta_description", ""),
@@ -166,6 +177,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
 
         # STEP 2.5: Inject internal links into draft body_md
         if content_library:
+            _t = time.time()
             try:
                 from packages.content.linker import inject_internal_links
                 draft["body_md"] = inject_internal_links(
@@ -174,14 +186,18 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                     current_keyword=keyword,
                     current_slug=_slugify(keyword),
                 )
+                logger.info(f"[{run_id}] Step 2.5 (linker) done in {time.time()-_t:.1f}s")
             except Exception as e:
                 logger.warning(f"[{run_id}] Internal links step failed (non-fatal): {e}")
 
         # STEP 3: Humanize
+        _t = time.time()
         logger.info(f"[{run_id}] Step 3/4: Humanizing...")
         humanized = await _humanize(draft, brand, run_id)
+        logger.info(f"[{run_id}] Step 3 done in {time.time()-_t:.1f}s")
 
         # STEP 3.1: Strip anti-AI words
+        _t = time.time()
         try:
             from packages.content.anti_words import clean_anti_words
             body_md_clean, removed = clean_anti_words(humanized.get("body_md", ""))
@@ -190,6 +206,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                 logger.info(f"[{run_id}] Anti-words removed ({len(removed)}): {removed[:5]}")
             humanized["body_md"] = body_md_clean
             humanized["body_html"] = body_html_clean
+            logger.info(f"[{run_id}] Step 3.1 (anti-words) done in {time.time()-_t:.1f}s")
         except Exception as e:
             logger.warning(f"[{run_id}] Anti-words step failed (non-fatal): {e}")
 
@@ -206,6 +223,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         })
 
         # STEP 3.5: Score (5 dimensions)
+        _t = time.time()
         logger.info(f"[{run_id}] Step 3.5/4: Scoring content quality...")
         try:
             from packages.content.scorer import score_content
@@ -217,6 +235,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                 site_context=site_context,
                 run_id=run_id,
             )
+            logger.info(f"[{run_id}] Step 3.5 (scorer) done in {time.time()-_t:.1f}s")
             score_update = {
                 "score_humanity":    scores["humanity"],
                 "score_specificity": scores["specificity"],
@@ -238,8 +257,10 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
             scores = {"total": 0}
 
         # STEP 4: Validate
+        _t = time.time()
         logger.info(f"[{run_id}] Step 4/4: Validating...")
         validation = _validate(humanized, keyword, brand)
+        logger.info(f"[{run_id}] Step 4 done in {time.time()-_t:.1f}s")
 
         status = "review" if validation["passed"] else "draft"
         await db.update("content_assets", asset_id, {
@@ -248,7 +269,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
             "status": status,
         })
 
-        logger.info(f"[{run_id}] Pipeline complete: {status} (quality={validation['quality_score']})")
+        logger.info(f"[{run_id}] Pipeline complete: {status} (quality={validation['quality_score']}, total={time.time()-_pipeline_start:.0f}s)")
 
         # Alert operator
         score_total = scores.get("total", 0) if isinstance(scores, dict) else 0

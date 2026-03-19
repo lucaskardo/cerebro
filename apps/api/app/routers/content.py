@@ -38,9 +38,20 @@ async def generate_content(req: ContentGenerate, bg: BackgroundTasks,
 
 
 async def _run_pipeline_bg(keyword: str, mission_id: str, asset_id: str, site_id: str = None):
+    import asyncio
     from packages.content.pipeline import run_pipeline
+    from packages.core import db
     try:
-        await run_pipeline(keyword, mission_id, asset_id, site_id=site_id)
+        await asyncio.wait_for(
+            run_pipeline(keyword, mission_id, asset_id, site_id=site_id),
+            timeout=600.0,  # 10 min hard limit per article
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"Pipeline TIMEOUT after 600s: {keyword} ({asset_id})")
+        await db.update("content_assets", asset_id, {
+            "status": "error",
+            "error_message": "Pipeline timeout: exceeded 600s limit",
+        })
     except Exception as e:
         logger.error(f"Background pipeline failed: {e}")
 
