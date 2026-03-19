@@ -97,6 +97,8 @@ function SystemContent() {
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
   const [sendingBriefing, setSendingBriefing] = useState(false);
+  const [previewingBriefing, setPreviewingBriefing] = useState(false);
+  const [briefingModal, setBriefingModal] = useState<{ subject: string; html: string } | null>(null);
 
   const showToast = (msg: string, type: Toast["type"] = "info") => {
     setToast({ msg, type });
@@ -220,7 +222,7 @@ function SystemContent() {
   };
 
   const sendTestBriefing = async () => {
-    if (!siteId) { showToast("Selecciona un site primero (usa el selector de marca arriba)", "error"); return; }
+    if (!siteId) { showToast("Selecciona un site en el selector de marca (sidebar izquierdo)", "error"); return; }
     setSendingBriefing(true);
     try {
       const res = await fetch(`${API_URL}/api/briefing/generate`, {
@@ -234,6 +236,25 @@ function SystemContent() {
       showToast(`Error enviando briefing: ${e}`, "error");
     } finally {
       setSendingBriefing(false);
+    }
+  };
+
+  const previewBriefing = async () => {
+    if (!siteId) { showToast("Selecciona un site en el selector de marca (sidebar izquierdo)", "error"); return; }
+    setPreviewingBriefing(true);
+    try {
+      const res = await fetch(`${API_URL}/api/briefing/preview`, {
+        method: "POST",
+        headers: authHdrs(),
+        body: JSON.stringify({ site_id: siteId }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const data = await res.json();
+      setBriefingModal({ subject: data.subject, html: data.body_html });
+    } catch (e) {
+      showToast(`Error generando preview: ${e}`, "error");
+    } finally {
+      setPreviewingBriefing(false);
     }
   };
 
@@ -251,6 +272,34 @@ function SystemContent() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
+
+      {/* Briefing preview modal */}
+      {briefingModal && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}
+          onClick={() => setBriefingModal(null)}
+        >
+          <div
+            style={{ background: "#fff", borderRadius: "12px", width: "100%", maxWidth: "640px", maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: "1rem 1.25rem", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8fafc" }}>
+              <div>
+                <div style={{ fontSize: "0.6875rem", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>Preview — Daily Briefing</div>
+                <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "#1e293b" }}>{briefingModal.subject}</div>
+              </div>
+              <button onClick={() => setBriefingModal(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.25rem", color: "#64748b", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <iframe
+                srcDoc={briefingModal.html}
+                style={{ width: "100%", height: "600px", border: "none" }}
+                title="Briefing preview"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div>
         <h1 className="page-title">Sistema</h1>
@@ -287,26 +336,43 @@ function SystemContent() {
       )}
 
       {/* Daily Briefing */}
-      <div className="dash-card" style={{ padding: "0.875rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
-        <div>
-          <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--dash-text)" }}>Daily Briefing</div>
-          <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", marginTop: "2px" }}>
-            Envía un resumen de actividad al email del operador
+      <div className="dash-card" style={{ padding: "0.875rem 1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+          <div>
+            <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--dash-text)" }}>Daily Briefing</div>
+            <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", marginTop: "2px" }}>
+              {siteId ? "Resumen de actividad para el site seleccionado" : "Selecciona un site en el sidebar para enviar"}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+            <button
+              onClick={previewBriefing}
+              disabled={previewingBriefing || !siteId}
+              style={{
+                padding: "0.5rem 0.875rem", borderRadius: "7px", fontSize: "0.8125rem",
+                fontWeight: 600, border: "1px solid var(--dash-border)",
+                background: "transparent", color: "var(--dash-text-dim)",
+                cursor: (previewingBriefing || !siteId) ? "not-allowed" : "pointer",
+                opacity: !siteId ? 0.4 : previewingBriefing ? 0.6 : 1, whiteSpace: "nowrap",
+              }}
+            >
+              {previewingBriefing ? "Generando…" : "Preview"}
+            </button>
+            <button
+              onClick={sendTestBriefing}
+              disabled={sendingBriefing || !siteId}
+              style={{
+                padding: "0.5rem 1.125rem", borderRadius: "7px", fontSize: "0.8125rem",
+                fontWeight: 600, border: "1px solid var(--dash-accent)",
+                background: "var(--dash-accent-dim)", color: "var(--dash-accent)",
+                cursor: (sendingBriefing || !siteId) ? "not-allowed" : "pointer",
+                opacity: !siteId ? 0.4 : sendingBriefing ? 0.6 : 1, whiteSpace: "nowrap",
+              }}
+            >
+              {sendingBriefing ? "Enviando…" : "Send Test Briefing"}
+            </button>
           </div>
         </div>
-        <button
-          onClick={sendTestBriefing}
-          disabled={sendingBriefing}
-          style={{
-            padding: "0.5rem 1.125rem", borderRadius: "7px", fontSize: "0.8125rem",
-            fontWeight: 600, border: "1px solid var(--dash-accent)",
-            background: "var(--dash-accent-dim)", color: "var(--dash-accent)",
-            cursor: sendingBriefing ? "not-allowed" : "pointer",
-            opacity: sendingBriefing ? 0.6 : 1, whiteSpace: "nowrap",
-          }}
-        >
-          {sendingBriefing ? "Enviando…" : "Send Test Briefing"}
-        </button>
       </div>
 
       {/* Tabs */}

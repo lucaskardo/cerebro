@@ -85,12 +85,18 @@ export default function Sidebar() {
     <>
       {/* Brand header */}
       <div style={{ padding: "1.25rem 1rem 0.75rem", borderBottom: "1px solid var(--dash-border)" }}>
-        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: "0.9375rem", color: "var(--dash-accent)", letterSpacing: "0.05em" }}>
-          ⚡ CEREBRO
-        </div>
-        <div style={{ fontSize: "0.625rem", color: "var(--dash-text-dim)", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: "0.2rem" }}>
-          Command Center
-        </div>
+        <Link
+          href={currentSiteId ? `/dashboard?site_id=${currentSiteId}` : "/dashboard"}
+          style={{ textDecoration: "none" }}
+          onClick={() => setMobileOpen(false)}
+        >
+          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: "0.9375rem", color: "var(--dash-accent)", letterSpacing: "0.05em" }}>
+            ⚡ CEREBRO
+          </div>
+          <div style={{ fontSize: "0.625rem", color: "var(--dash-text-dim)", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: "0.2rem" }}>
+            Command Center
+          </div>
+        </Link>
       </div>
 
       {/* Brand selector */}

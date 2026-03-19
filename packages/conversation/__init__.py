@@ -75,6 +75,9 @@ class ChatEngine:
         return f"""Eres CEREBRO, el Sistema Operativo de Crecimiento para {company}.
 Ya conoces este negocio profundamente. Aquí está todo lo que sabes:
 
+SITE_ID: {site_id}
+(Usa este ID exactamente en TODOS los tool calls que requieran site_id.)
+
 EMPRESA: {company} — {country}{f", {industry}" if industry else ""}
 PROPUESTA DE VALOR: {value_prop}
 
@@ -224,7 +227,10 @@ INSTRUCCIONES DE COMPORTAMIENTO:
 
     # ─── Tool execution ───────────────────────────────────────────────────────
 
-    async def _execute_tool(self, tool_name: str, tool_input: dict) -> str:
+    async def _execute_tool(self, tool_name: str, tool_input: dict, site_id: str = "") -> str:
+        # Always inject the stream's site_id if Claude omitted it or passed a wrong one
+        if site_id and not tool_input.get("site_id"):
+            tool_input = {**tool_input, "site_id": site_id}
         try:
             if tool_name == "get_leads":
                 days = tool_input.get("days", 7)
@@ -312,9 +318,12 @@ INSTRUCCIONES DE COMPORTAMIENTO:
                 })
 
             elif tool_name == "update_intelligence":
-                profiles = await db.query("client_profiles", params={"select": "*", "site_id": f"eq.{tool_input['site_id']}", "limit": "1"})
+                sid = tool_input.get("site_id", "")
+                logger.info(f"update_intelligence: site_id={sid!r} field={tool_input.get('field')!r} action={tool_input.get('action')!r} item_name={tool_input.get('item_name')!r}")
+                profiles = await db.query("client_profiles", params={"select": "*", "site_id": f"eq.{sid}", "limit": "1"})
+                logger.info(f"update_intelligence: profiles found={len(profiles)}")
                 if not profiles:
-                    return json.dumps({"status": "error", "detail": "Profile not found"})
+                    return json.dumps({"status": "error", "detail": f"Profile not found for site_id={sid}"})
                 profile = profiles[0]
                 field   = tool_input["field"]
                 action  = tool_input.get("action", "replace")
@@ -353,7 +362,9 @@ INSTRUCCIONES DE COMPORTAMIENTO:
                 else:
                     return json.dumps({"status": "error", "detail": f"Unknown action: {action}"})
 
-                await db.update("client_profiles", profile["id"], {field: update_value})
+                logger.info(f"update_intelligence: writing field={field!r} len={len(update_value) if isinstance(update_value, list) else 'scalar'} to profile_id={profile['id']}")
+                result = await db.update("client_profiles", profile["id"], {field: update_value})
+                logger.info(f"update_intelligence: write result={bool(result)}")
                 return json.dumps({"status": "updated", "field": field, "action": action})
 
             elif tool_name == "run_cycle":
@@ -472,7 +483,7 @@ INSTRUCCIONES DE COMPORTAMIENTO:
 
                     yield sse({"type": "action", "tool": tool_name, "input": tool_input})
 
-                    result = await self._execute_tool(tool_name, tool_input)
+                    result = await self._execute_tool(tool_name, tool_input, site_id=site_id)
                     actions_taken.append({"tool": tool_name, "input": tool_input, "result": result})
                     tool_results.append({
                         "type":        "tool_result",
