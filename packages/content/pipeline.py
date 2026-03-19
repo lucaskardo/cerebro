@@ -78,6 +78,21 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
     else:
         await db.update("content_assets", asset_id, {"status": "generating"})
 
+    # Fetch content library for context (50 most recent approved articles)
+    content_library = []
+    if site_id:
+        try:
+            content_library = await db.query("content_assets", params={
+                "select": "title,keyword,slug,meta_description",
+                "site_id": f"eq.{site_id}",
+                "status": "eq.approved",
+                "order": "created_at.desc",
+                "limit": "50",
+            })
+        except Exception as e:
+            logger.warning(f"[{run_id}] Could not load content library: {e}")
+    brand["content_library"] = content_library
+
     try:
         # STEP 0: Research
         logger.info(f"[{run_id}] Step 0/4: Researching keyword...")
@@ -98,9 +113,17 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         brief = await _generate_brief(keyword, brand, research, run_id)
         await db.update("content_assets", asset_id, {"brief": brief})
 
+        # STEP 1.5: Source-verified research
+        logger.info(f"[{run_id}] Step 1.5/4: Fetching verified sources...")
+        try:
+            sources = await _research_sources(keyword, brand.get("country", ""), run_id)
+        except Exception as e:
+            logger.warning(f"[{run_id}] Source research failed (non-fatal): {e}")
+            sources = []
+
         # STEP 2: Draft
         logger.info(f"[{run_id}] Step 2/4: Writing draft...")
-        draft = await _generate_draft(brief, brand, run_id)
+        draft = await _generate_draft(brief, brand, run_id, sources=sources)
         await db.update("content_assets", asset_id, {
             "title": draft.get("title", keyword),
             "meta_description": draft.get("meta_description", ""),
@@ -109,11 +132,24 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
             "faq_section": draft.get("faq_section", []),
             "data_claims": draft.get("data_claims", []),
             "partner_mentions": draft.get("partner_mentions", []),
+            "metadata": {**(await db.get_by_id("content_assets", asset_id) or {}).get("metadata") or {}, "sources_used": draft.get("sources_used", [])},
         })
 
         # STEP 3: Humanize
         logger.info(f"[{run_id}] Step 3/4: Humanizing...")
         humanized = await _humanize(draft, brand, run_id)
+
+        # STEP 3.1: Strip anti-AI words
+        try:
+            from packages.content.anti_words import clean_anti_words
+            body_md_clean, removed = clean_anti_words(humanized.get("body_md", ""))
+            body_html_clean, _ = clean_anti_words(humanized.get("body_html", ""))
+            if removed:
+                logger.info(f"[{run_id}] Anti-words removed ({len(removed)}): {removed[:5]}")
+            humanized["body_md"] = body_md_clean
+            humanized["body_html"] = body_html_clean
+        except Exception as e:
+            logger.warning(f"[{run_id}] Anti-words step failed (non-fatal): {e}")
 
         # Inject UTM params into all article links
         raw_html = humanized.get("body_html", "")
@@ -263,6 +299,25 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
     audience = brand.get("target_audience", {})
     audience_summary = ", ".join(audience.get("segments", [])) if isinstance(audience, dict) else str(audience)
 
+    # Content library context — avoid duplicate angles, suggest internal links
+    library_context = ""
+    content_library = brand.get("content_library", [])
+    if content_library:
+        existing_titles = [a.get("title", "") for a in content_library[:30] if a.get("title")]
+        existing_keywords = [a.get("keyword", "") for a in content_library[:30] if a.get("keyword")]
+        link_candidates = [
+            f"/articulo/{a['slug']} ({a['title']})"
+            for a in content_library[:10]
+            if a.get("slug") and a.get("title")
+        ]
+        library_context = (
+            f"\nBiblioteca de contenido existente ({len(content_library)} artículos):\n"
+            f"IMPORTANTE: NO repetir estos temas, buscar ángulos DIFERENTES:\n"
+            f"{json.dumps(existing_keywords[:20], ensure_ascii=False)}\n\n"
+            f"Artículos existentes para internal linking:\n"
+            + "\n".join(f"- {l}" for l in link_candidates)
+        )
+
     # Enrich prompt with research context
     research_context = ""
     if research:
@@ -284,7 +339,7 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
             cta_config=json.dumps(brand.get("cta_config", {}), ensure_ascii=False),
             brand_tone_example=brand.get("brand_tone", "directo, honesto, útil"),
             client_intelligence=brand.get("client_intelligence", ""),
-        ) + research_context,
+        ) + research_context + library_context,
         system=prompts.BRIEF_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "experto en el tema"),
             brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
@@ -297,28 +352,55 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
         run_id=run_id,
     )
 
-    # Cross-brand linking opportunities
-    try:
-        other_content = await db.query("content_assets", params={
-            "select": "title,slug,keyword",
-            "status": "eq.approved",
-            "limit": "20",
-            "order": "created_at.desc",
-        })
-        if other_content:
-            brief_result = result["parsed"] or {}
-            existing_links = brief_result.get("internal_links_suggested", [])
-            cross_links = [f"/articulo/{a['slug']}" for a in other_content[:5] if a.get("slug")]
-            brief_result["cross_brand_links"] = cross_links
-            return brief_result
-    except Exception:
-        pass
-    return result["parsed"] or {"title_suggestions": [keyword], "h2_sections": [], "key_points": []}
+    brief_result = result["parsed"] or {"title_suggestions": [keyword], "h2_sections": [], "key_points": []}
+
+    # Add content library links as cross-brand linking suggestions
+    if content_library:
+        cross_links = [
+            f"/articulo/{a['slug']}"
+            for a in content_library[:5]
+            if a.get("slug")
+        ]
+        brief_result["cross_brand_links"] = cross_links
+
+    return brief_result
 
 
-async def _generate_draft(brief: dict, brand: dict, run_id: str) -> dict:
+async def _research_sources(keyword: str, country: str, run_id: str) -> list[dict]:
+    """Find 3-5 verifiable statistics for the keyword with source name and URL."""
+    result = await complete(
+        prompt=(
+            f'Encuentra 3-5 estadísticas verificables sobre "{keyword}" en {country or "Latinoamérica"}.\n'
+            f"Para cada estadística incluye: el dato exacto, la fuente (organización/institución), año y URL si existe.\n"
+            f"Prioriza: instituciones oficiales, estudios académicos, informes de industria.\n"
+            f"NUNCA inventes datos. Si no hay datos verificables, devuelve lista vacía.\n\n"
+            f"JSON exacto:\n"
+            f'{{"sources": [{{"stat": "dato específico", "source_name": "nombre organización", "year": "2024", "url": "https://... o null", "confidence": "high|medium|low"}}]}}'
+        ),
+        system="Eres un investigador de datos. Solo devuelves estadísticas verificables con fuentes reales. Responde SOLO en JSON válido.",
+        model="haiku",
+        json_mode=True,
+        pipeline_step="sources",
+        run_id=run_id,
+    )
+    parsed = result.get("parsed") or {}
+    return parsed.get("sources", [])
+
+
+async def _generate_draft(brief: dict, brand: dict, run_id: str, sources: list = None) -> dict:
     titles = brief.get("title_suggestions", [""])
     title = titles[0] if isinstance(titles, list) and titles else str(titles)
+
+    # Build sources context for prompt injection
+    sources_context = ""
+    if sources:
+        sources_context = (
+            "\nFuentes verificadas para citar (úsalas en el artículo):\n"
+            + "\n".join(
+                f"- {s.get('stat')} — {s.get('source_name', '')} {s.get('year', '')} {('(' + s['url'] + ')') if s.get('url') else ''}"
+                for s in sources
+            )
+        )
 
     result = await complete(
         prompt=prompts.DRAFT_USER.format(
@@ -331,6 +413,7 @@ async def _generate_draft(brief: dict, brand: dict, run_id: str) -> dict:
             first_paragraph_hook=brief.get("first_paragraph_hook", ""),
             target_word_count=brief.get("target_word_count", 1500),
             client_intelligence=brand.get("client_intelligence", ""),
+            sources_context=sources_context,
         ),
         system=prompts.DRAFT_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "experto en el tema"),

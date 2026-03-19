@@ -43,15 +43,16 @@ Tono: {brand_tone}.
 
 {client_intelligence}
 
-REGLAS:
-1. Párrafo 1: respuesta directa 30-50 palabras (Google AI Overviews)
-2. Secciones H2: 75-300 palabras, auto-contenidas
-3. FAQ con preguntas reales al final
-4. Partner ({partner_name}) máximo 2 veces, natural
-5. NUNCA inventes datos. Si no seguro: [VERIFICAR]
-6. Usa COP Y USD en ejemplos
-7. Cita fuentes con datos específicos
-8. Mínimo un ejemplo numérico concreto
+REGLAS DE ESTRUCTURA GEO (Generative Engine Optimization):
+1. TL;DR al inicio: 2-3 oraciones que respondan directamente la intención de búsqueda (Google AI Overviews)
+2. Cada sección H2: empieza con un bloque extractable de 40-60 palabras que responde la pregunta de esa sección de forma autónoma
+3. Comparaciones en tablas HTML (<table>) cuando hay 2+ opciones
+4. Mínimo 3-5 estadísticas citadas con nombre de fuente específico (ej: "Según INDESA 2024...")
+5. Nombres específicos de marcas/tiendas/lugares reales del país, NO genéricos
+6. FAQ con exactamente 5 preguntas reales al final (People Also Ask)
+7. Partner ({partner_name}) máximo 2 veces, natural
+8. NUNCA inventes datos. Si no seguro: [VERIFICAR fuente]
+9. Secciones H2: 75-300 palabras, auto-contenidas
 
 Responde SOLO en JSON válido."""
 
@@ -68,16 +69,27 @@ Target: {target_word_count} palabras
 
 {client_intelligence}
 
+{sources_context}
+
+ESTRUCTURA OBLIGATORIA:
+- Inicio: TL;DR (2-3 oraciones, bloque extractable)
+- Cada H2: primer párrafo 40-60 palabras auto-contenido
+- Tablas HTML para comparaciones
+- Fuentes específicas con nombre al citar datos
+- FAQ exactamente 5 preguntas al final
+- Sección "## Fuentes" al final con lista de fuentes citadas
+
 JSON:
 {{
     "title": "título final",
     "meta_description": "150-160 chars con keyword",
     "outline": {{"h2_sections": ["secciones"]}},
-    "body_md": "artículo COMPLETO en Markdown ## H2 ### H3",
+    "body_md": "artículo COMPLETO en Markdown ## H2 ### H3 con TL;DR, tablas, FAQ y sección Fuentes",
     "faq_section": [{{"question": "?", "answer": "2-4 oraciones"}}],
     "internal_links_needed": ["temas para links"],
     "data_claims": [{{"claim": "dato", "confidence": "verified|inferred|needs_verification", "source": "fuente"}}],
-    "partner_mentions": [{{"position": "párrafo N", "context": "cómo"}}]
+    "partner_mentions": [{{"position": "párrafo N", "context": "cómo"}}],
+    "sources_used": [{{"name": "nombre fuente", "url": "url si disponible", "stat": "estadística usada"}}]
 }}"""
 
 HUMANIZE_SYSTEM = """Eres {brand_persona}. Haces contenido más humano y accesible para tu audiencia.

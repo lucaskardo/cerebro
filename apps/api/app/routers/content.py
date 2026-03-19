@@ -118,6 +118,26 @@ async def get_content_image(aid: str, style: str = "financial"):
     return Response(content=base64.b64decode(result["data"]), media_type="image/jpeg")
 
 
+@router.post("/api/content/{aid}/regenerate")
+async def regenerate_content(aid: str, bg: BackgroundTasks,
+                              request: Request, _auth=Depends(require_auth)):
+    a = await db.get_by_id("content_assets", aid)
+    if not a:
+        raise HTTPException(404, "Content not found")
+
+    keyword = a.get("keyword", "")
+    mission_id = a.get("mission_id", "")
+    site_id = a.get("site_id")
+
+    if not keyword or not mission_id:
+        raise HTTPException(400, "Asset missing keyword or mission_id")
+
+    await db.update("content_assets", aid, {"status": "generating", "error_message": None})
+    bg.add_task(_run_pipeline_bg, keyword, mission_id, aid, site_id)
+    await audit(request, "regenerate_content", "content_assets", aid, {"keyword": keyword})
+    return {"asset_id": aid, "status": "generating", "keyword": keyword}
+
+
 @router.post("/api/content/{aid}/review")
 async def review_content(aid: str, action: ContentApprove, bg: BackgroundTasks,
                           request: Request, _auth=Depends(require_auth)):
