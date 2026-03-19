@@ -100,6 +100,7 @@ _OPENAPI_TAGS = [
     {"name": "Personas",    "description": "Digital personas, platform identities, and social content schedule."},
     {"name": "Loop",        "description": "Continuous strategy loop: run cycles, view history, monitor status."},
     {"name": "Intelligence", "description": "Client intelligence: market research, competitor analysis, profile management."},
+    {"name": "Chat",        "description": "Conversational AI: stream responses, list and retrieve conversations."},
 ]
 
 app = FastAPI(
@@ -207,6 +208,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
 from apps.api.app.routers import system, content, leads, strategy, personas, attribution, execution, loop, intelligence
+from apps.api.app.routers import conversation
 
 app.include_router(system.router)
 app.include_router(content.router)
@@ -217,6 +219,7 @@ app.include_router(attribution.router)
 app.include_router(execution.router)
 app.include_router(loop.router)
 app.include_router(intelligence.router)
+app.include_router(conversation.router)
 
 
 if __name__ == "__main__":

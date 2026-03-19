@@ -7,6 +7,7 @@ import type { Site } from "@/lib/api";
 import { api } from "@/lib/api";
 
 const NAV = [
+  { href: "/dashboard/chat",         label: "Chat",          icon: "◬" },
   { href: "/dashboard",              label: "Health",        icon: "◈" },
   { href: "/dashboard/leads",        label: "Leads",         icon: "◎" },
   { href: "/dashboard/content",      label: "Contenido",     icon: "▦" },
