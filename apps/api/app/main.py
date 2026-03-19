@@ -155,6 +155,9 @@ _dynamic_origins.update([
     f"https://{config.PRIMARY_DOMAIN}",
     "https://web-ten-woad-99.vercel.app",
     "https://web-a1uf6mml9-lucaskardos-projects.vercel.app",
+    # ── Per-client domains (add every new domain here before deploying) ──
+    "https://colchonespanama.com",
+    "https://www.colchonespanama.com",
     *_extra_origins,
 ])
 app.add_middleware(

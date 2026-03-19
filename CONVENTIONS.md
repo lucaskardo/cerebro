@@ -41,7 +41,7 @@
 - Mock DB calls with AsyncMock (no real DB in tests)
 
 ## Deployment Rules (Learned from Production)
-- **CORS before deploy**: Every new domain/site MUST be in CORS origins BEFORE deploying the site. Both `https://domain.com` and `https://www.domain.com`. Best: use dynamic CORS (read from `domain_sites` table at startup) so new sites auto-work without code changes.
+- **CORS before deploy**: Every new domain/site MUST be added to BOTH: (1) the static `_dynamic_origins` seed list in `main.py` (lines ~153–159) AND (2) the `domain_sites` table. Both `https://domain.com` and `https://www.domain.com`. The static list is the reliable fallback when DB load fails. This has caused production outages 3+ times — do NOT skip this step.
 - **Auth whitelist**: Every new endpoint called by public sites MUST be in `PUBLIC_ROUTES` or `PUBLIC_GET_PREFIXES` in `middleware/auth.py` before going live.
 - **Dashboard pages**: MUST be `"use client"` with `useEffect` — never SSR fetch to the API.
 - **No 500s**: Every API endpoint MUST have `try/except` returning empty data — never propagate 500s.
