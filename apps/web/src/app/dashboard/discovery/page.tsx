@@ -1,3 +1,4 @@
+// Discovery dashboard — intelligence layer visualization
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
