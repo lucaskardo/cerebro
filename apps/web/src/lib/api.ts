@@ -356,6 +356,71 @@ export interface Approval {
   resolved_at: string | null;
 }
 
+export interface IntelEntity {
+  id: string; site_id: string; entity_type: string; name: string;
+  slug: string; description: string | null; status: string;
+  metadata: Record<string, any>; created_at: string; updated_at: string;
+}
+export interface IntelFact {
+  id: string; site_id: string; entity_id: string | null; fact_key: string;
+  category: string; value_text: string | null; value_number: number | null;
+  value_json: any; confidence: number; utility_score: number;
+  evidence_count: number; quarantined: boolean; tags: string[];
+  source: string | null; last_verified: string | null;
+}
+export interface IntelInsight {
+  id: string; site_id: string; insight_type: string; title: string;
+  body: string; supporting_facts: string[]; impact_score: number; status: string;
+}
+export interface IntelDiscovery {
+  id: string; site_id: string; candidate_type: string; proposed_slug: string;
+  proposed_data: Record<string, any>; metrics: Record<string, any>;
+  status: string; decision_reason: string | null; decided_at: string | null;
+  created_at: string | null;
+}
+export interface CompletenessRow {
+  entity_id: string; name: string; entity_type: string;
+  fact_count: number; categories: string[];
+}
+export interface ResearchRun {
+  id: string; site_id: string; task_type: string; trigger: string;
+  status: string; tokens_used: number; search_calls: number;
+  cost_usd: number; error_message: string | null;
+  started_at: string | null; completed_at: string | null;
+}
+
+export const intelV2 = {
+  entities: (siteId: string, type?: string) =>
+    fetchAPI<IntelEntity[]>(`/api/v2/intelligence/entities/${siteId}${type ? `?type=${type}` : ""}`),
+  facts: (siteId: string, opts?: { category?: string; entity_id?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.category) q.set("category", opts.category);
+    if (opts?.entity_id) q.set("entity_id", opts.entity_id);
+    return fetchAPI<IntelFact[]>(`/api/v2/intelligence/facts/${siteId}${q.toString() ? `?${q}` : ""}`);
+  },
+  insights: (siteId: string) =>
+    fetchAPI<IntelInsight[]>(`/api/v2/intelligence/insights/${siteId}`),
+  discoveries: (siteId: string, status = "proposed") =>
+    fetchAPI<IntelDiscovery[]>(`/api/v2/intelligence/discoveries/${siteId}?status=${status}`),
+  decideDiscovery: (id: string, status: "approved" | "rejected", reason?: string) =>
+    fetch(`${API_URL}/api/v2/intelligence/discoveries/${id}/decide`, {
+      method: "POST", headers: authHeaders(),
+      body: JSON.stringify({ status, reason }),
+    }).then(r => r.json()),
+  completeness: (siteId: string) =>
+    fetchAPI<CompletenessRow[]>(`/api/v2/intelligence/completeness/${siteId}`),
+  research: (siteId: string) =>
+    fetchAPI<ResearchRun[]>(`/api/v2/intelligence/research/${siteId}`),
+  triggerAnalysis: (siteId: string) =>
+    fetch(`${API_URL}/api/v2/intelligence/analyze/${siteId}`, {
+      method: "POST", headers: authHeaders(),
+    }).then(r => r.json()),
+  triggerResearch: (siteId: string) =>
+    fetch(`${API_URL}/api/v2/intelligence/research/${siteId}`, {
+      method: "POST", headers: authHeaders(),
+    }).then(r => r.json()),
+};
+
 export const api = {
   status: () => fetchAPI<Status>("/api/status"),
   budget: () => fetchAPI<Budget>("/api/budget"),

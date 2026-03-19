@@ -16,6 +16,7 @@ const NAV = [
   { href: "/dashboard/attribution",  label: "Atribución",    icon: "⌖" },
   { href: "/dashboard/approvals",    label: "Aprobaciones",  icon: "◉", badge: true },
   { href: "/dashboard/intelligence", label: "Intelligence",  icon: "⊕" },
+  { href: "/dashboard/discovery",   label: "Discovery",     icon: "◎" },
   { href: "/dashboard/personas",     label: "Personas",      icon: "◑" },
   { href: "/dashboard/system",       label: "Sistema",       icon: "⚙" },
 ];
