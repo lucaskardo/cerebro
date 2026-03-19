@@ -142,3 +142,93 @@ class TestCoreExceptions:
         assert str(e) == "test error"
         assert issubclass(SupabaseError, Exception)
         assert issubclass(SupabaseTimeout, Exception)
+
+
+class TestIntelligenceV2:
+    """Smoke tests for /api/v2/intelligence endpoints."""
+
+    _AUTH = {"X-API-Key": "test-secret"}
+    _SITE = "d3920d22-2c34-40b1-9e8e-59142af08e2a"
+
+    def test_entities_requires_auth(self):
+        with _make_client() as client:
+            r = client.get(f"/api/v2/intelligence/entities/{self._SITE}")
+            assert r.status_code == 401
+
+    def test_facts_requires_auth(self):
+        with _make_client() as client:
+            r = client.get(f"/api/v2/intelligence/facts/{self._SITE}")
+            assert r.status_code == 401
+
+    def test_entities_returns_list(self):
+        with patch("packages.core.SupabaseClient.query", new_callable=AsyncMock, return_value=[]):
+            with _make_client() as client:
+                r = client.get(
+                    f"/api/v2/intelligence/entities/{self._SITE}",
+                    headers=self._AUTH,
+                )
+                assert r.status_code == 200
+                assert isinstance(r.json(), list)
+
+    def test_facts_returns_list(self):
+        with patch("packages.core.SupabaseClient.query", new_callable=AsyncMock, return_value=[]):
+            with _make_client() as client:
+                r = client.get(
+                    f"/api/v2/intelligence/facts/{self._SITE}",
+                    headers=self._AUTH,
+                )
+                assert r.status_code == 200
+                assert isinstance(r.json(), list)
+
+    def test_completeness_returns_list(self):
+        with patch("packages.core.SupabaseClient.rpc", new_callable=AsyncMock, return_value=[]):
+            with _make_client() as client:
+                r = client.get(
+                    f"/api/v2/intelligence/completeness/{self._SITE}",
+                    headers=self._AUTH,
+                )
+                assert r.status_code == 200
+                assert isinstance(r.json(), list)
+
+    def test_insights_returns_list(self):
+        with patch("packages.core.SupabaseClient.query", new_callable=AsyncMock, return_value=[]):
+            with _make_client() as client:
+                r = client.get(
+                    f"/api/v2/intelligence/insights/{self._SITE}",
+                    headers=self._AUTH,
+                )
+                assert r.status_code == 200
+                assert isinstance(r.json(), list)
+
+    def test_discoveries_returns_list(self):
+        with patch("packages.core.SupabaseClient.query", new_callable=AsyncMock, return_value=[]):
+            with _make_client() as client:
+                r = client.get(
+                    f"/api/v2/intelligence/discoveries/{self._SITE}",
+                    headers=self._AUTH,
+                )
+                assert r.status_code == 200
+                assert isinstance(r.json(), list)
+
+    def test_research_runs_returns_list(self):
+        with patch("packages.core.SupabaseClient.query", new_callable=AsyncMock, return_value=[]):
+            with _make_client() as client:
+                r = client.get(
+                    f"/api/v2/intelligence/research/{self._SITE}",
+                    headers=self._AUTH,
+                )
+                assert r.status_code == 200
+                assert isinstance(r.json(), list)
+
+    def test_migrate_endpoint_exists(self):
+        # Patch at module level (where router imported it) so mock is effective
+        with patch("apps.api.app.routers.intelligence_v2._run_migration",
+                   new_callable=AsyncMock,
+                   return_value={"entities": 0, "facts": 0, "relations": 0, "policies": 0}):
+            with _make_client() as client:
+                r = client.post(
+                    f"/api/v2/intelligence/migrate/{self._SITE}",
+                    headers=self._AUTH,
+                )
+                assert r.status_code == 200
+                assert r.json()["ok"] is True
