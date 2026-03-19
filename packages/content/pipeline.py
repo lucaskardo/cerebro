@@ -222,6 +222,22 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         except Exception as e:
             logger.warning(f"[{run_id}] Anti-words step failed (non-fatal): {e}")
 
+        # Convert body_md → body_html (LLM no longer outputs HTML to save tokens)
+        _body_md_final = humanized.get("body_md", draft.get("body_md", ""))
+        try:
+            import markdown as _md
+            _body_html_raw = _md.markdown(
+                _body_md_final,
+                extensions=["tables", "fenced_code"],
+            )
+        except Exception:
+            # Minimal fallback: wrap paragraphs in <p>
+            _body_html_raw = "\n".join(
+                f"<p>{line}</p>" if line.strip() and not line.startswith("#") else line
+                for line in _body_md_final.split("\n")
+            )
+        humanized["body_html"] = _body_html_raw
+
         # Inject UTM params into all article links
         raw_html = humanized.get("body_html", "")
         site_slug = site.get("domain", "cerebro").split(".")[0] if site else "cerebro"
@@ -433,6 +449,7 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
             client_intelligence=brand.get("client_intelligence", ""),
         ),
         model="haiku",
+        max_tokens=4096,
         json_mode=True,
         pipeline_step="brief",
         run_id=run_id,

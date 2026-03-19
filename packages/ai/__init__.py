@@ -125,7 +125,7 @@ async def complete(
 
 async def _call_anthropic(prompt, system, model_id, max_tokens, temperature,
                            json_mode, pipeline_step, run_id, _retry):
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=180.0) as client:
         try:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",

@@ -134,8 +134,7 @@ Título: {title}
 JSON:
 {{
     "title": "título humanizado",
-    "body_md": "artículo humanizado Markdown",
-    "body_html": "versión HTML (<h2>,<p>,<ul>,<a>,<strong>)",
+    "body_md": "artículo humanizado Markdown completo",
     "changes_made": ["cambios realizados"],
     "humanization_score": 0-100
 }}"""
