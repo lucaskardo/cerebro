@@ -444,23 +444,35 @@ INSTRUCCIONES DE COMPORTAMIENTO:
         actions_taken = []
         final_text = ""
 
-        try:
+        _anthropic_headers = {
+            "x-api-key":         config.ANTHROPIC_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type":      "application/json",
+        }
+
+        async def _anthropic_post(payload: dict) -> httpx.Response:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(
+                return await client.post(
                     "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key":          config.ANTHROPIC_KEY,
-                        "anthropic-version":  "2023-06-01",
-                        "content-type":       "application/json",
-                    },
-                    json={
-                        "model":      CLAUDE_MODEL,
-                        "max_tokens": 4096,
-                        "system":     system,
-                        "tools":      self.define_tools(),
-                        "messages":   api_messages,
-                    },
+                    headers=_anthropic_headers,
+                    json=payload,
                 )
+
+        try:
+            # Phase 1 — with keepalive pings so Railway doesn't timeout
+            _task = asyncio.ensure_future(_anthropic_post({
+                "model":      CLAUDE_MODEL,
+                "max_tokens": 4096,
+                "system":     system,
+                "tools":      self.define_tools(),
+                "messages":   api_messages,
+            }))
+            while True:
+                done, _ = await asyncio.wait({_task}, timeout=10.0)
+                if done:
+                    resp = _task.result()
+                    break
+                yield sse({"type": "ping"})
 
             if resp.status_code >= 400:
                 yield sse({"type": "error", "message": f"Anthropic API error {resp.status_code}: {resp.text[:200]}"})
@@ -491,32 +503,29 @@ INSTRUCCIONES DE COMPORTAMIENTO:
                         "content":     result,
                     })
 
-                # Call Claude again with tool results
+                # Call Claude again with tool results — also with keepalive pings
                 api_messages.append({"role": "assistant", "content": content_blocks})
                 api_messages.append({"role": "user",      "content": tool_results})
 
-                async with httpx.AsyncClient(timeout=120.0) as client:
-                    resp2 = await client.post(
-                        "https://api.anthropic.com/v1/messages",
-                        headers={
-                            "x-api-key":         config.ANTHROPIC_KEY,
-                            "anthropic-version": "2023-06-01",
-                            "content-type":      "application/json",
-                        },
-                        json={
-                            "model":      CLAUDE_MODEL,
-                            "max_tokens": 4096,
-                            "system":     system,
-                            "messages":   api_messages,
-                        },
-                    )
+                _task2 = asyncio.ensure_future(_anthropic_post({
+                    "model":      CLAUDE_MODEL,
+                    "max_tokens": 4096,
+                    "system":     system,
+                    "messages":   api_messages,
+                }))
+                while True:
+                    done, _ = await asyncio.wait({_task2}, timeout=10.0)
+                    if done:
+                        resp2 = _task2.result()
+                        break
+                    yield sse({"type": "ping"})
 
                 if resp2.status_code >= 400:
                     yield sse({"type": "error", "message": f"API error on follow-up: {resp2.status_code}"})
                     return
 
-                data2         = resp2.json()
-                final_text    = "".join(b["text"] for b in data2.get("content", []) if b.get("type") == "text")
+                data2      = resp2.json()
+                final_text = "".join(b["text"] for b in data2.get("content", []) if b.get("type") == "text")
 
             else:
                 final_text = "".join(b["text"] for b in content_blocks if b.get("type") == "text")

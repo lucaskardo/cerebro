@@ -77,6 +77,8 @@ function DashboardContent() {
   const [toast, setToast] = useState<string | null>(null);
   const [briefingPreview, setBriefingPreview] = useState<{ subject: string; body_text: string } | null>(null);
   const [loadingBriefing, setLoadingBriefing] = useState(false);
+  const [briefingEmail, setBriefingEmail] = useState("");
+  const [sendingBriefing, setSendingBriefing] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -105,6 +107,33 @@ function DashboardContent() {
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
+  }
+
+  async function sendBriefing() {
+    if (!siteId) return;
+    const email = briefingEmail.trim();
+    setSendingBriefing(true);
+    try {
+      const res = await fetch(`${API_URL}/api/briefing/generate`, {
+        method: "POST",
+        headers: authHdrs(),
+        body: JSON.stringify({ site_id: siteId, to_email: email || undefined }),
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "sent") {
+        showToast(`✓ Briefing enviado a ${data.to}`);
+      } else if (res.status === 400) {
+        showToast(`✗ ${data.detail || "No hay email configurado"}`);
+      } else if (res.status === 500 && String(data.detail || "").toLowerCase().includes("resend")) {
+        showToast("✗ Email service no configurado — usa Preview para ver el briefing");
+      } else {
+        showToast(`✗ ${data.detail || data.status || "Error al enviar"}`);
+      }
+    } catch {
+      showToast("✗ Error de conexión al enviar briefing");
+    } finally {
+      setSendingBriefing(false);
+    }
   }
 
   async function loadBriefingPreview() {
@@ -317,9 +346,9 @@ function DashboardContent() {
       {/* Daily Briefing preview */}
       {siteId && (
         <div className="dash-card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.875rem" }}>
-            <h2 className="section-title" style={{ fontSize: "0.875rem" }}>Daily Briefing</h2>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <div style={{ marginBottom: "0.875rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.625rem" }}>
+              <h2 className="section-title" style={{ fontSize: "0.875rem" }}>Daily Briefing</h2>
               <button
                 onClick={loadBriefingPreview}
                 disabled={loadingBriefing}
@@ -331,7 +360,33 @@ function DashboardContent() {
               >
                 {loadingBriefing ? "Generando…" : "Ver preview"}
               </button>
-              <Link href="/dashboard/system" style={{ fontSize: "0.7rem", color: "var(--dash-accent)" }}>Enviar →</Link>
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <input
+                type="email"
+                placeholder="Email destino (opcional)"
+                value={briefingEmail}
+                onChange={(e) => setBriefingEmail(e.target.value)}
+                style={{
+                  flex: 1, padding: "0.3rem 0.625rem", fontSize: "0.75rem",
+                  background: "var(--dash-bg)", border: "1px solid var(--dash-border)",
+                  borderRadius: "4px", color: "var(--dash-text)", outline: "none",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              />
+              <button
+                onClick={sendBriefing}
+                disabled={sendingBriefing}
+                style={{
+                  padding: "0.3rem 0.75rem", borderRadius: "4px", fontSize: "0.75rem",
+                  fontWeight: 600, border: "1px solid var(--dash-accent)",
+                  background: "var(--dash-accent-dim)", color: "var(--dash-accent)",
+                  cursor: sendingBriefing ? "not-allowed" : "pointer",
+                  opacity: sendingBriefing ? 0.6 : 1, flexShrink: 0,
+                }}
+              >
+                {sendingBriefing ? "Enviando…" : "Enviar test"}
+              </button>
             </div>
           </div>
           {briefingPreview ? (
