@@ -232,3 +232,72 @@ class TestIntelligenceV2:
                 )
                 assert r.status_code == 200
                 assert r.json()["ok"] is True
+
+
+class TestIntelligenceService:
+    """Smoke tests for IntelligenceService."""
+
+    def test_intelligence_service_importable(self):
+        from packages.intelligence.service import IntelligenceService
+        svc = IntelligenceService()
+        assert callable(getattr(svc, "for_content", None))
+        assert callable(getattr(svc, "for_whatsapp", None))
+        assert callable(getattr(svc, "for_quiz", None))
+        assert callable(getattr(svc, "for_dashboard", None))
+        assert callable(getattr(svc, "for_briefing", None))
+
+    def test_content_packet_importable(self):
+        from packages.intelligence.service import ContentPacket
+        packet = ContentPacket(
+            site_id="x",
+            keyword="test",
+            facts=[],
+            company="TestCo",
+            country="MX",
+            value_prop="Test value prop",
+            brand_voice="directo",
+            products=[],
+        )
+        assert packet.keyword == "test"
+        assert packet.to_prompt() == ""  # empty facts → empty string
+
+    def test_content_packet_to_prompt_renders(self):
+        from packages.intelligence.service import ContentPacket
+        packet = ContentPacket(
+            site_id="x",
+            keyword="colchon ortopédico",
+            facts=[
+                {"fact_type": "pain_point", "fact_key": "dolor_espalda", "value_text": "Dolor lumbar crónico", "value_number": None, "utility_score": 0.9},
+                {"fact_type": "competitor", "fact_key": "main_competitor", "value_text": "Dormimundo", "value_number": None, "utility_score": 0.7},
+                {"fact_type": "desire", "fact_key": "mejor_sueno", "value_text": "Adultos con dolor crónico que buscan dormir mejor", "value_number": None, "utility_score": 0.8},
+            ],
+            company="NauralSleep",
+            country="MX",
+            value_prop="Colchones ortopédicos premium para dormir mejor",
+            brand_voice="Honesta y directa",
+            products=[{"display_name": "Naural Basic"}],
+        )
+        prompt = packet.to_prompt()
+        assert "colchon ortopédico" in prompt
+        assert "NauralSleep" in prompt
+        assert "Dolor lumbar" in prompt
+        assert "AUDIENCIA PARA ESTE ARTÍCULO" in prompt
+        assert len(prompt.split()) <= 260  # ~250 words limit
+
+    def test_for_content_empty_db_returns_fallback_packet(self):
+        """for_content() with empty DB returns packet with no facts (triggers pipeline fallback)."""
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+        from packages.intelligence.service import IntelligenceService
+
+        async def _run():
+            with patch("packages.core.SupabaseClient.query", new_callable=AsyncMock, return_value=[]):
+                with patch("packages.core.SupabaseClient.insert", new_callable=AsyncMock, return_value={"id": "receipt-id"}):
+                    svc = IntelligenceService()
+                    packet = await svc.for_content("test-site-id", "colchon precio", [])
+                    assert packet.facts == []
+                    assert packet.to_prompt() == ""
+                    return packet
+
+        packet = asyncio.run(_run())
+        assert packet.keyword == "colchon precio"
