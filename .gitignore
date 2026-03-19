@@ -36,3 +36,6 @@ logs/
 htmlcov/
 .pytest_cache/
 .vercel
+
+# Git worktrees
+.worktrees/
