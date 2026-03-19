@@ -39,6 +39,7 @@ export interface ContentAsset {
   score_readability: number | null;
   score_feedback: string | null;
   site_id: string | null;
+  body_html?: string | null;
   created_at: string;
   updated_at: string;
 }
