@@ -2,12 +2,9 @@
 Migrate existing NauralSleep data from client_profiles + products
 into the structured intelligence layer (entities, facts, relations).
 """
-import json
 from packages.core import db, get_logger
 
 logger = get_logger("intelligence.migrate")
-
-NAURAL_SITE_ID = "d3920d22-2c34-40b1-9e8e-59142af08e2a"
 
 
 async def _upsert_entity(site_id: str, entity_type: str, name: str,
@@ -279,9 +276,11 @@ async def run_migration(site_id: str) -> dict:
                 )
                 counts["relations"] += 1
 
+    company_name = profile.get("company_name", "brand")
+    brand_slug = company_name.lower().replace(" ", "-")
     brand_eid = await _upsert_entity(
-        site_id, "brand", profile.get("company_name", "NauralSleep"),
-        "naural-sleep", description=vp,
+        site_id, "brand", company_name,
+        brand_slug, description=vp,
     )
     counts["entities"] += 1
     for slug, eid in competitor_entities.items():

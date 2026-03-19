@@ -1,4 +1,5 @@
 """Intelligence v2 router — structured intelligence layer endpoints."""
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query
 from typing import Optional, List
 
@@ -114,19 +115,19 @@ async def list_discoveries(
 async def decide_discovery(discovery_id: str, body: DecideDiscoveryRequest):
     # body.status is validated by Pydantic Literal["approved", "rejected"]
     try:
-        from datetime import datetime, timezone
         updated = await db.update("discovery_candidates", discovery_id, {
             "status": body.status,
             "decision_reason": body.reason,
             "decided_at": datetime.now(timezone.utc).isoformat(),
         })
-        return updated or {"error": "not found"}
+        return updated or {}
     except Exception as e:
         logger.error(f"decide_discovery {discovery_id}: {e}", exc_info=True)
         return {"error": str(e)}
 
 
-@router.get("/completeness/{site_id}", dependencies=[Depends(require_auth)])
+@router.get("/completeness/{site_id}", response_model=List[CompletenessRow],
+            dependencies=[Depends(require_auth)])
 async def get_completeness(site_id: str):
     try:
         rows = await db.rpc("check_entity_completeness", {"p_site_id": site_id})
