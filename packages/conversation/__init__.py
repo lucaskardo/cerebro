@@ -319,20 +319,37 @@ INSTRUCCIONES DE COMPORTAMIENTO:
                 field   = tool_input["field"]
                 action  = tool_input.get("action", "replace")
 
+                def _item_matches(item, search: str) -> bool:
+                    """Case-insensitive match against any string value in the item."""
+                    s = search.strip().lower()
+                    if not s:
+                        return False
+                    if isinstance(item, dict):
+                        return any(str(v).lower() == s for v in item.values() if isinstance(v, str))
+                    return str(item).lower() == s
+
                 if action == "replace":
                     update_value = tool_input["value"]
                 elif action == "array_add":
-                    current = profile.get(field) or []
+                    current = list(profile.get(field) or [])
                     new_item = tool_input.get("value") or {"name": tool_input.get("item_name", "")}
-                    # Avoid duplicates by name
-                    item_name = tool_input.get("item_name") or (new_item.get("name") if isinstance(new_item, dict) else str(new_item))
-                    current = [i for i in current if (i.get("name") if isinstance(i, dict) else i) != item_name]
+                    # Derive search name to deduplicate
+                    search = tool_input.get("item_name") or (new_item.get("name") if isinstance(new_item, dict) else str(new_item))
+                    current = [i for i in current if not _item_matches(i, search)]
                     current.append(new_item)
                     update_value = current
                 elif action == "array_remove":
-                    current = profile.get(field) or []
-                    item_name = tool_input.get("item_name", "")
-                    update_value = [i for i in current if (i.get("name") if isinstance(i, dict) else i) != item_name]
+                    current = list(profile.get(field) or [])
+                    # Accept name from item_name OR value (Claude may use either)
+                    search = tool_input.get("item_name") or tool_input.get("value") or ""
+                    if isinstance(search, dict):
+                        search = search.get("name", "")
+                    before = len(current)
+                    update_value = [i for i in current if not _item_matches(i, str(search))]
+                    removed = before - len(update_value)
+                    if removed == 0:
+                        return json.dumps({"status": "not_found", "field": field, "searched": search,
+                                           "available": [i.get("name", i) if isinstance(i, dict) else i for i in current]})
                 else:
                     return json.dumps({"status": "error", "detail": f"Unknown action: {action}"})
 
