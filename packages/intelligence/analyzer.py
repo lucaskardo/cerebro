@@ -5,6 +5,7 @@ Run once per week (Sundays). Cost target: <$1/month per client.
 """
 import asyncio
 import os
+import re as _re
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -14,6 +15,13 @@ from packages.ai import complete
 from packages.ai.prompts.intelligence_insights import INSIGHTS_USER, INSIGHTS_SYSTEM
 
 logger = get_logger("intelligence.analyzer")
+
+
+def _slugify(text: str) -> str:
+    text = str(text).lower().strip()
+    text = _re.sub(r'[^\w\s-]', '', text)
+    text = _re.sub(r'[\s_]+', '-', text)
+    return _re.sub(r'-+', '-', text)[:50]
 
 PHASE_TIMEOUT = 120  # seconds per phase
 MAX_RESEARCH_TASKS_PER_WEEK = 10
@@ -174,6 +182,15 @@ class IntelligenceAnalyzer:
 
         # Group observations by observation_type to derive fact_key + category
         type_to_category = {
+            # Observation types → fact categories (THE CRITICAL MAPPING)
+            "lead_conversion": "audience",
+            "content_performance": "performance",
+            "search_signal": "market",
+            "competitor_signal": "competitor",
+            "market_signal": "market",
+            "user_behavior": "audience",
+            "research_finding": "other",
+            # Direct category pass-through (from migration seed, manual inserts)
             "pricing": "pricing",
             "positioning": "positioning",
             "audience": "audience",
@@ -191,36 +208,54 @@ class IntelligenceAnalyzer:
             try:
                 obs_type = obs.get("observation_type", "other")
                 entity_id = obs.get("entity_id")
-                raw_value = obs.get("raw_value") or {}
+                raw = obs.get("raw_value") or {}
+                tags = obs.get("normalized_tags") or []
                 source_ref = obs.get("source_ref") or obs.get("source_type", "analyzer")
 
                 category = type_to_category.get(obs_type, "other")
-                fact_key = f"{obs_type}_{str(obs.get('id', ''))[:8]}"
+
+                if raw.get("quiz_key"):
+                    qk = _slugify(raw["quiz_key"])
+                    qv = _slugify(str(raw.get("quiz_value", "")))
+                    fact_key = f"{category}.{qk}.{qv}"
+                elif raw.get("keyword"):
+                    kw = _slugify(raw["keyword"])
+                    fact_key = f"{category}.content.{kw}"
+                elif raw.get("sale_value") is not None:
+                    lead_ref = _slugify(str(raw.get("lead_id", ""))[:12])
+                    fact_key = f"{category}.sale.{lead_ref or 'unknown'}"
+                elif entity_id:
+                    entity_slug = raw.get("entity_slug") or raw.get("slug") or str(entity_id)[:12]
+                    metric = raw.get("metric") or obs_type
+                    fact_key = f"{category}.{_slugify(entity_slug)}.{_slugify(metric)}"
+                elif tags:
+                    tag_slug = _slugify(str(tags[0]))
+                    fact_key = f"{category}.{tag_slug}.general"
+                else:
+                    fact_key = f"{category}.{obs_type}.general"
 
                 # Determine which value column to use
                 value_text = None
                 value_number = None
                 value_json = None
 
-                if isinstance(raw_value, dict):
-                    if "number" in raw_value:
-                        value_number = float(raw_value["number"])
-                    elif "text" in raw_value:
-                        value_text = str(raw_value["text"])[:2000]
+                if isinstance(raw, dict):
+                    if "number" in raw:
+                        value_number = float(raw["number"])
+                    elif "text" in raw:
+                        value_text = str(raw["text"])[:2000]
                     else:
-                        value_json = raw_value
-                elif isinstance(raw_value, (int, float)):
-                    value_number = float(raw_value)
-                elif isinstance(raw_value, str):
-                    value_text = raw_value[:2000]
+                        value_json = raw
+                elif isinstance(raw, (int, float)):
+                    value_number = float(raw)
+                elif isinstance(raw, str):
+                    value_text = raw[:2000]
                 else:
-                    value_json = {"raw": str(raw_value)}
+                    value_json = {"raw": str(raw)}
 
                 # Default to value_json if nothing else was set
                 if value_text is None and value_number is None and value_json is None:
-                    value_json = {"raw": str(raw_value)}
-
-                tags = obs.get("normalized_tags") or []
+                    value_json = {"raw": str(raw)}
 
                 await db.rpc(
                     "upsert_intelligence_fact",
@@ -291,7 +326,7 @@ class IntelligenceAnalyzer:
                 )
                 lead_count = len(leads) if leads else 0
 
-                fact_key = f"content_perf_{str(asset_id)[:8]}"
+                fact_key = f"performance.content.{str(asset_id)[:12]}.lead-count"
                 await db.rpc(
                     "upsert_intelligence_fact",
                     {
@@ -301,9 +336,9 @@ class IntelligenceAnalyzer:
                         "p_category": "performance",
                         "p_value_text": None,
                         "p_value_number": float(lead_count),
-                        "p_value_json": {"asset_id": asset_id, "title": asset.get("title", "")},
+                        "p_value_json": None,
                         "p_confidence": 1.0,
-                        "p_tags": ["content_performance"],
+                        "p_tags": ["content_performance", str(asset_id)[:12]],
                         "p_source": "content_pipeline",
                         "p_quarantined": False,
                         "p_source_ref": asset_id,
@@ -385,6 +420,16 @@ class IntelligenceAnalyzer:
         for p in policies:
             policy_map[p.get("entity_type")] = p
 
+        _OBS_TO_ENTITY = {
+            "lead_conversion": "segment",
+            "content_performance": "other",
+            "search_signal": "other",
+            "competitor_signal": "brand",
+            "market_signal": "other",
+            "user_behavior": "segment",
+            "research_finding": "other",
+        }
+
         # Build candidate_key → {count, entity_type, display_name} map
         candidate_counts: dict = {}
         for obs in processed_obs:
@@ -401,7 +446,7 @@ class IntelligenceAnalyzer:
                 if ckey not in candidate_counts:
                     candidate_counts[ckey] = {
                         "count": 0,
-                        "entity_type": obs_type,
+                        "entity_type": _OBS_TO_ENTITY.get(obs_type, "other"),
                         "display_name": str(tag).strip(),
                         "candidate_key": ckey,
                     }
@@ -414,7 +459,7 @@ class IntelligenceAnalyzer:
                 if ckey not in candidate_counts:
                     candidate_counts[ckey] = {
                         "count": 0,
-                        "entity_type": obs_type,
+                        "entity_type": _OBS_TO_ENTITY.get(obs_type, "other"),
                         "display_name": name,
                         "candidate_key": ckey,
                     }
@@ -426,7 +471,7 @@ class IntelligenceAnalyzer:
             entity_type = info["entity_type"]
             display_name = info["display_name"]
             evidence_count = info["count"]
-            slug = display_name.lower().replace(" ", "_")[:80]
+            slug = _slugify(display_name)
 
             # Skip if matches existing entity slug
             if slug in existing_slugs:
@@ -434,7 +479,7 @@ class IntelligenceAnalyzer:
 
             # Check threshold from policy
             policy = policy_map.get(entity_type, {})
-            threshold = policy.get("min_evidence_threshold", default_threshold)
+            threshold = policy.get("min_observations", default_threshold)
 
             if evidence_count < threshold:
                 continue
@@ -579,19 +624,12 @@ class IntelligenceAnalyzer:
         try:
             policies = await db.query(
                 "discovery_policies",
-                params={"select": "budget_per_run_usd,max_discoveries_per_week", "site_id": f"eq.{site_id}"},
+                params={"select": "research_budget_monthly,research_token_budget_monthly", "site_id": f"eq.{site_id}"},
             )
         except Exception:
             policies = []
 
-        default_budget = 0.05
         default_max = MAX_RESEARCH_TASKS_PER_WEEK
-        if policies:
-            policy = policies[0]
-            default_max = min(
-                policy.get("max_discoveries_per_week") or default_max,
-                MAX_RESEARCH_TASKS_PER_WEEK,
-            )
 
         # Sort gaps: most missing facts first (higher missing_count = higher priority)
         sorted_gaps = sorted(
@@ -642,7 +680,7 @@ class IntelligenceAnalyzer:
                             "entity_name": entity_name,
                             "slot": i,
                         }
-                        source_type = "web_search_queued"
+                        source_type = "ai_research"
                     else:
                         obs_value = {
                             "gap_entity": entity_name,
@@ -651,14 +689,14 @@ class IntelligenceAnalyzer:
                             "status": "placeholder",
                             "note": "No SERPAPI_KEY — manual research needed",
                         }
-                        source_type = "gap_placeholder"
+                        source_type = "manual"
 
                     await db.insert(
                         "intelligence_observations",
                         {
                             "site_id": site_id,
                             "entity_id": entity_id,
-                            "observation_type": entity_type,
+                            "observation_type": "research_finding",
                             "source_type": source_type,
                             "source_ref": f"research_run:{research_run_id}",
                             "raw_value": obs_value,

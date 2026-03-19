@@ -13,8 +13,7 @@ logger = get_logger("intelligence.service")
 
 # Fact types we pull for content context
 _CONTENT_FACT_TYPES = (
-    "pain_point,desire,objection,differentiator,"
-    "buying_trigger,competitor,content_angle,brand_voice"
+    "audience,objection,differentiator,trigger,competitor,content,positioning,product"
 )
 
 
@@ -30,7 +29,7 @@ class ContentPacket:
     country: str
     value_prop: str
     brand_voice: str
-    products: list       # entity dicts with display_name
+    products: list       # entity dicts with name, slug
 
     def to_prompt(self) -> str:
         """Render ≤250-word context string for {client_intelligence} placeholder.
@@ -41,7 +40,7 @@ class ContentPacket:
         # Pick best fact per type (highest utility_score)
         by_type: dict[str, dict] = {}
         for f in self.facts:
-            ft = f.get("fact_type", "")
+            ft = f.get("category", "")
             existing = by_type.get(ft)
             if existing is None or f.get("utility_score", 0) > existing.get("utility_score", 0):
                 by_type[ft] = f
@@ -63,13 +62,12 @@ class ContentPacket:
                 return str(vj)
             return ""
 
-        audience = _val(by_type["desire"]) if "desire" in by_type else ""
-        pain = _val(by_type["pain_point"]) if "pain_point" in by_type else ""
+        audience = _val(by_type["audience"]) if "audience" in by_type else ""
         competitor = _val(by_type["competitor"]) if "competitor" in by_type else ""
         objection = _val(by_type["objection"]) if "objection" in by_type else ""
-        angle = _val(by_type.get("content_angle") or by_type.get("differentiator") or {})
-        tone = _val(by_type["brand_voice"]) if "brand_voice" in by_type else self.brand_voice
-        product_rec = self.products[0]["display_name"] if self.products else ""
+        angle = _val(by_type.get("content") or by_type.get("differentiator") or {})
+        tone = _val(by_type["positioning"]) if "positioning" in by_type else self.brand_voice
+        product_rec = self.products[0]["name"] if self.products else ""
 
         lines = [
             f'CONTEXTO ESPECÍFICO PARA: "{self.keyword}"',
@@ -78,9 +76,7 @@ class ContentPacket:
             "",
         ]
         if audience:
-            lines.append(f"AUDIENCIA PARA ESTE ARTÍCULO: {audience}")
-        if pain:
-            lines.append(f"DOLOR PRINCIPAL: {pain}")
+            lines.append(f"AUDIENCIA/DOLOR PRINCIPAL: {audience}")
         if product_rec:
             lines.append(f"PRODUCTO A RECOMENDAR: {product_rec}")
         if competitor:
@@ -167,14 +163,14 @@ class IntelligenceService:
 
         # 3 parallel queries
         facts_q = db.query("intelligence_facts", params={
-            "select": "id,fact_type,fact_key,value_text,value_number,value_json,utility_score,confidence",
+            "select": "id,category,fact_key,value_text,value_number,value_json,utility_score,confidence",
             "site_id": f"eq.{site_id}",
-            "fact_type": f"in.({_CONTENT_FACT_TYPES})",
+            "category": f"in.({_CONTENT_FACT_TYPES})",
             "order": "utility_score.desc",
             "limit": "40",
         })
         products_q = db.query("intelligence_entities", params={
-            "select": "id,display_name,entity_key,metadata",
+            "select": "id,name,slug,metadata",
             "site_id": f"eq.{site_id}",
             "entity_type": "eq.product",
             "limit": "10",
@@ -319,8 +315,9 @@ class IntelligenceService:
         try:
             receipt = await db.insert("intelligence_context_receipts", {
                 "site_id": site_id,
-                "context_type": context_type,
-                "prompt_hash": keyword[:64],
+                "consumer_type": "content_pipeline",
+                "consumer_ref": keyword[:64],
+                "facts_count": len(fact_ids),
             })
             receipt_id = receipt.get("id")
             if receipt_id and fact_ids:
@@ -329,7 +326,6 @@ class IntelligenceService:
                         await db.insert("intelligence_receipt_facts", {
                             "receipt_id": receipt_id,
                             "fact_id": fid,
-                            "was_relevant": True,
                         })
                     except Exception:
                         pass

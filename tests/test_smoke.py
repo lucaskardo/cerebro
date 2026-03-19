@@ -267,21 +267,21 @@ class TestIntelligenceService:
             site_id="x",
             keyword="colchon ortopédico",
             facts=[
-                {"fact_type": "pain_point", "fact_key": "dolor_espalda", "value_text": "Dolor lumbar crónico", "value_number": None, "utility_score": 0.9},
-                {"fact_type": "competitor", "fact_key": "main_competitor", "value_text": "Dormimundo", "value_number": None, "utility_score": 0.7},
-                {"fact_type": "desire", "fact_key": "mejor_sueno", "value_text": "Adultos con dolor crónico que buscan dormir mejor", "value_number": None, "utility_score": 0.8},
+                {"category": "audience", "fact_key": "dolor_espalda", "value_text": "Dolor lumbar crónico", "value_number": None, "utility_score": 0.9},
+                {"category": "competitor", "fact_key": "main_competitor", "value_text": "Dormimundo", "value_number": None, "utility_score": 0.7},
+                {"category": "objection", "fact_key": "precio_alto", "value_text": "El precio es muy alto", "value_number": None, "utility_score": 0.8},
             ],
             company="NauralSleep",
             country="MX",
             value_prop="Colchones ortopédicos premium para dormir mejor",
             brand_voice="Honesta y directa",
-            products=[{"display_name": "Naural Basic"}],
+            products=[{"name": "Naural Basic", "slug": "naural-basic"}],
         )
         prompt = packet.to_prompt()
         assert "colchon ortopédico" in prompt
         assert "NauralSleep" in prompt
         assert "Dolor lumbar" in prompt
-        assert "AUDIENCIA PARA ESTE ARTÍCULO" in prompt
+        assert "AUDIENCIA/DOLOR PRINCIPAL" in prompt
         assert len(prompt.split()) <= 260  # ~250 words limit
 
     def test_for_content_empty_db_returns_fallback_packet(self):

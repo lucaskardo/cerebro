@@ -113,13 +113,41 @@ async def list_discoveries(
 @router.post("/discoveries/{discovery_id}/decide",
              dependencies=[Depends(require_auth)])
 async def decide_discovery(discovery_id: str, body: DecideDiscoveryRequest):
-    # body.status is validated by Pydantic Literal["approved", "rejected"]
     try:
+        candidates = await db.query("discovery_candidates", params={
+            "select": "*", "id": f"eq.{discovery_id}"
+        })
+        if not candidates:
+            return {"error": "Not found"}
+        candidate = candidates[0]
+
         updated = await db.update("discovery_candidates", discovery_id, {
             "status": body.status,
             "decision_reason": body.reason,
             "decided_at": datetime.now(timezone.utc).isoformat(),
         })
+
+        if body.status == "approved" and candidate.get("candidate_type") == "entity":
+            proposed = candidate.get("proposed_data", {})
+            entity_type = proposed.get("entity_type", "other")
+            name = proposed.get("name") or candidate.get("proposed_slug", "unknown")
+            slug = candidate.get("proposed_slug", "")
+            site_id = candidate.get("site_id")
+            if site_id and slug:
+                try:
+                    await db.insert("intelligence_entities", {
+                        "site_id": site_id,
+                        "entity_type": entity_type,
+                        "name": name,
+                        "slug": slug,
+                        "description": proposed.get("description", "Discovered via observation cluster"),
+                        "metadata": {"discovered_via": "discovery_engine", "discovery_id": discovery_id},
+                        "status": "active",
+                    })
+                    logger.info(f"Discovery materialized: {name} ({entity_type})")
+                except Exception as ent_err:
+                    logger.warning(f"Entity creation failed (may exist): {ent_err}")
+
         return updated or {}
     except Exception as e:
         logger.error(f"decide_discovery {discovery_id}: {e}", exc_info=True)
