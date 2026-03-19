@@ -122,6 +122,11 @@ async def capture_lead(lead: LeadCapture, bg: BackgroundTasks, request: Request)
         )
         bg.add_task(_send_lead_email, lead)
 
+        # Fire-and-forget: create intelligence observations from lead
+        if result and site_id:
+            from packages.intelligence.updater import IntelligenceUpdater  # lazy: avoid startup overhead
+            bg.add_task(IntelligenceUpdater().on_lead_captured, result, site_id)
+
     return {"status": "captured", "id": result["id"] if result else None}
 
 

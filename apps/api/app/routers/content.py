@@ -172,6 +172,11 @@ async def review_content(aid: str, action: ContentApprove, bg: BackgroundTasks,
         await db.update("content_assets", aid, {"status": "approved"})
         logger.info(f"Content approved: {a['title']}")
 
+        # Notify intelligence layer of new published content
+        if a.get("site_id"):
+            from packages.intelligence.updater import IntelligenceUpdater  # lazy: avoid startup overhead
+            bg.add_task(IntelligenceUpdater().on_content_published, a, a["site_id"])
+
         # Trigger social draft generation in background
         if a.get("site_id"):
             bg.add_task(_generate_social_drafts_bg, aid, a["site_id"])

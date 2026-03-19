@@ -152,6 +152,32 @@ async def list_research_runs(site_id: str, limit: int = Query(20, le=100)):
         return []
 
 
+@router.post("/analyze/{site_id}", dependencies=[Depends(require_auth)])
+async def run_analysis_cycle(site_id: str):
+    """Manually trigger the weekly intelligence analysis cycle."""
+    try:
+        from packages.intelligence.analyzer import IntelligenceAnalyzer
+        analyzer = IntelligenceAnalyzer()
+        result = await analyzer.run_weekly_cycle(site_id)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        logger.error(f"analyze {site_id}: {e}", exc_info=True)
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/research/{site_id}", dependencies=[Depends(require_auth)])
+async def run_research_cycle(site_id: str):
+    """Manually trigger research-only cycle (phases 4+5)."""
+    try:
+        from packages.intelligence.analyzer import IntelligenceAnalyzer
+        analyzer = IntelligenceAnalyzer()
+        result = await analyzer.run_research_only(site_id)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        logger.error(f"research {site_id}: {e}", exc_info=True)
+        return {"ok": False, "error": str(e)}
+
+
 @router.post("/migrate/{site_id}", dependencies=[Depends(require_auth)])
 async def migrate_site(site_id: str):
     """Seed structured intelligence layer from existing client_profiles + products data."""

@@ -308,3 +308,32 @@ class TestIntelligenceService:
         import packages.content.pipeline as pipeline_mod
         src = inspect.getsource(pipeline_mod)
         assert "IntelligenceService" in src, "pipeline.py must reference IntelligenceService"
+
+
+class TestIntelligenceSession3:
+    """Session 3: IntelligenceUpdater + IntelligenceAnalyzer + wired endpoints."""
+
+    def test_intelligence_updater_importable(self):
+        from packages.intelligence.updater import IntelligenceUpdater
+        u = IntelligenceUpdater()
+        assert callable(getattr(u, "on_lead_captured", None))
+        assert callable(getattr(u, "on_content_published", None))
+        assert callable(getattr(u, "on_sale_completed", None))
+
+    def test_intelligence_analyzer_importable(self):
+        from packages.intelligence.analyzer import IntelligenceAnalyzer
+        a = IntelligenceAnalyzer()
+        assert callable(getattr(a, "run_weekly_cycle", None))
+        assert callable(getattr(a, "run_research_only", None))
+
+    def test_analyze_endpoint_requires_auth(self):
+        """POST /api/v2/intelligence/analyze/{site_id} must require auth."""
+        client = _make_client()
+        resp = client.post("/api/v2/intelligence/analyze/test-site")
+        assert resp.status_code == 401
+
+    def test_research_post_endpoint_requires_auth(self):
+        """POST /api/v2/intelligence/research/{site_id} must require auth."""
+        client = _make_client()
+        resp = client.post("/api/v2/intelligence/research/test-site")
+        assert resp.status_code == 401
