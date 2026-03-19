@@ -4,7 +4,7 @@ Pure-SQL context builders for each consumer (content, WhatsApp, quiz, dashboard,
 No LLM calls. Target: <100ms per call via parallel asyncio.gather queries.
 """
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from packages.core import db, get_logger
@@ -185,15 +185,10 @@ class IntelligenceService:
             "limit": "1",
         })
 
-        try:
-            facts, products, profiles = await asyncio.gather(
-                facts_q, products_q, profile_q,
-                return_exceptions=True,
-            )
-        except Exception as e:
-            logger.warning(f"for_content: parallel queries failed: {e}")
-            return ContentPacket(site_id=site_id, keyword=keyword, facts=[], company="",
-                                 country="", value_prop="", brand_voice="", products=[])
+        facts, products, profiles = await asyncio.gather(
+            facts_q, products_q, profile_q,
+            return_exceptions=True,
+        )
 
         # Handle partial failures gracefully
         if isinstance(facts, Exception):
