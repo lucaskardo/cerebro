@@ -58,15 +58,15 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
 
         # Focused article context — IntelligenceService (pure SQL, <100ms)
         # Falls back to LLM-based context_builder, then generic profile dump
+        # to_prompt() returns "" when no facts → triggers fallback naturally
         try:
             from packages.intelligence.service import IntelligenceService
-            _packet = await IntelligenceService().for_content(site_id, keyword, content_library)
-            if _packet.facts:
-                client_intelligence = _packet.to_prompt()
-            else:
-                raise ValueError("empty packet — no facts in intelligence graph")
+            packet = await IntelligenceService().for_content(site_id, keyword, content_library)
+            client_intelligence = packet.to_prompt()
         except Exception as e:
-            logger.warning(f"[{run_id}] IntelligenceService failed, falling back: {e}")
+            logger.warning(f"[{run_id}] IntelligenceService error: {e}")
+
+        if not client_intelligence:
             try:
                 from packages.intelligence.context_builder import build_article_context
                 client_intelligence = await build_article_context(site_id, keyword, content_library)
