@@ -176,6 +176,24 @@ class SupabaseClient:
             except Exception as e:
                 raise SupabaseError(f"count {table}: {e}") from e
 
+    async def rpc(self, fn: str, params: dict = None) -> list:
+        """Call a Supabase SQL function via RPC. POST /rest/v1/rpc/<fn>"""
+        url = f"{self.url}/rest/v1/rpc/{fn}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                resp = await client.post(url, headers=self._headers, json=params or {})
+                if resp.status_code >= 400:
+                    msg = f"RPC {fn}: HTTP {resp.status_code} — {resp.text[:200]}"
+                    self.logger.error(msg)
+                    raise SupabaseError(msg)
+                return resp.json() if resp.text else []
+            except httpx.TimeoutException:
+                raise SupabaseTimeout(f"RPC timeout: {fn}")
+            except (SupabaseError, SupabaseTimeout):
+                raise
+            except Exception as e:
+                raise SupabaseError(f"RPC {fn}: {e}") from e
+
 # Singleton
 db = SupabaseClient()
 
