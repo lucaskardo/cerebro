@@ -101,6 +101,161 @@ function ScoreDetail({ item, onClose }: { item: ContentAsset; onClose: () => voi
 
 interface Toast { id: number; msg: string; ok: boolean; }
 
+const QUICK_TAGS = ["Tono incorrecto", "Muy genérico", "Datos incorrectos", "Demasiado largo", "Falta diferenciación", "SEO débil"];
+
+function ArticlePreview({
+  itemId,
+  onClose,
+  onAction,
+}: {
+  itemId: string;
+  onClose: () => void;
+  onAction: (id: string, action: "approve" | "reject", notes?: string) => Promise<void>;
+}) {
+  const [article, setArticle] = useState<ContentAsset | null>(null);
+  const [fetching, setFetching] = useState(true);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [freeText, setFreeText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("cerebro_token") : null;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/content/${itemId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => r.json())
+      .then((data) => { setArticle(data); setFetching(false); })
+      .catch(() => setFetching(false));
+  }, [itemId]);
+
+  function toggleTag(tag: string) {
+    setSelectedTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
+  }
+
+  async function handleAction(action: "approve" | "reject") {
+    if (action === "reject" && !showFeedback) {
+      setShowFeedback(true);
+      return;
+    }
+    setSubmitting(true);
+    const notes = action === "reject"
+      ? [...selectedTags, freeText].filter(Boolean).join(" | ")
+      : undefined;
+    await onAction(itemId, action, notes || undefined);
+    setSubmitting(false);
+  }
+
+  const aiTotal = article?.score_humanity != null
+    ? Math.round((article.score_humanity * 0.25) + ((article.score_specificity ?? 0) * 0.25) + ((article.score_structure ?? 0) * 0.2) + ((article.score_seo ?? 0) * 0.2) + ((article.score_readability ?? 0) * 0.1))
+    : null;
+
+  return (
+    <>
+      <style>{`
+        .article-preview-content h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; }
+        .article-preview-content h2 { font-size: 1.25rem; font-weight: 700; margin: 1.25rem 0 0.625rem; }
+        .article-preview-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+        .article-preview-content p { margin: 0 0 0.875rem; }
+        .article-preview-content ul, .article-preview-content ol { margin: 0 0 1rem; padding-left: 1.5rem; }
+        .article-preview-content li { margin-bottom: 0.375rem; }
+        .article-preview-content a { color: var(--dash-accent); }
+        .article-preview-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.875rem; }
+        .article-preview-content th, .article-preview-content td { padding: 0.5rem 0.75rem; border: 1px solid var(--dash-border); }
+        .article-preview-content th { background: var(--dash-bg); font-weight: 600; }
+        .article-preview-content blockquote { border-left: 3px solid var(--dash-accent); padding-left: 1rem; margin: 1rem 0; color: var(--dash-text-dim); font-style: italic; }
+        .article-preview-content img { max-width: 100%; border-radius: 8px; }
+      `}</style>
+      <div
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 400, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "2rem 1rem", overflowY: "auto" }}
+        onClick={onClose}
+      >
+        <div
+          style={{ background: "var(--dash-card)", border: "1px solid var(--dash-border)", borderRadius: "14px", width: "100%", maxWidth: "780px", boxShadow: "0 32px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--dash-border)", display: "flex", alignItems: "flex-start", gap: "1rem", justifyContent: "space-between" }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: "0.9375rem", color: "var(--dash-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {fetching ? "Cargando…" : truncate(article?.title ?? "", 70)}
+              </div>
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.375rem", flexWrap: "wrap" }}>
+                {article?.keyword && <span style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>{article.keyword}</span>}
+                {aiTotal != null && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: scoreColor(aiTotal) }}>AI {aiTotal}/100</span>}
+                {article?.quality_score != null && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: scoreColor(article.quality_score) }}>Q {article.quality_score}/100</span>}
+              </div>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--dash-text-dim)", fontSize: "1.5rem", lineHeight: 1, flexShrink: 0 }}>×</button>
+          </div>
+
+          {/* Body */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem" }}>
+            {fetching ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {[...Array(8)].map((_, i) => <div key={i} className="skeleton" style={{ height: i === 0 ? "1.5rem" : "1rem", width: i % 3 === 2 ? "70%" : "100%" }} />)}
+              </div>
+            ) : article?.body_html ? (
+              <div className="article-preview-content" style={{ fontSize: "0.9rem", lineHeight: 1.75, color: "var(--dash-text)" }} dangerouslySetInnerHTML={{ __html: article.body_html }} />
+            ) : (
+              <div style={{ color: "var(--dash-text-dim)", textAlign: "center", padding: "3rem 0", fontSize: "0.875rem" }}>Sin contenido disponible</div>
+            )}
+          </div>
+
+          {/* Footer */}
+          {article?.status === "review" && (
+            <div style={{ borderTop: "1px solid var(--dash-border)", padding: "1rem 1.5rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {showFeedback && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
+                    {QUICK_TAGS.map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(tag)}
+                        style={{
+                          padding: "0.25rem 0.625rem", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer",
+                          border: selectedTags.includes(tag) ? "1px solid var(--dash-accent)" : "1px solid var(--dash-border)",
+                          background: selectedTags.includes(tag) ? "var(--dash-accent-dim)" : "transparent",
+                          color: selectedTags.includes(tag) ? "var(--dash-accent)" : "var(--dash-text-dim)",
+                        }}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={freeText}
+                    onChange={(e) => setFreeText(e.target.value)}
+                    placeholder="Feedback adicional…"
+                    rows={3}
+                    style={{ width: "100%", background: "var(--dash-bg)", border: "1px solid var(--dash-border)", borderRadius: "8px", padding: "0.625rem 0.75rem", color: "var(--dash-text)", fontSize: "0.8125rem", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }}
+                  />
+                </div>
+              )}
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                <button
+                  disabled={submitting}
+                  onClick={() => handleAction("reject")}
+                  style={{ padding: "0.5rem 1rem", borderRadius: "8px", fontSize: "0.8125rem", fontWeight: 600, border: "1px solid var(--dash-border)", background: "transparent", color: "var(--dash-text-dim)", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.6 : 1 }}
+                >
+                  {showFeedback ? (submitting ? "…" : "Confirmar rechazo") : "Rechazar"}
+                </button>
+                <button
+                  disabled={submitting}
+                  onClick={() => handleAction("approve")}
+                  style={{ padding: "0.5rem 1rem", borderRadius: "8px", fontSize: "0.8125rem", fontWeight: 600, border: "1px solid var(--dash-accent)", background: "var(--dash-accent-dim)", color: "var(--dash-accent)", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.6 : 1 }}
+                >
+                  {submitting ? "…" : "Aprobar"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function ContentPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -117,6 +272,7 @@ function ContentPageContent() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [actioning, setActioning] = useState<Record<string, boolean>>({});
   const [scoreDetail, setScoreDetail] = useState<ContentAsset | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -185,6 +341,25 @@ function ContentPageContent() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
       {scoreDetail && <ScoreDetail item={scoreDetail} onClose={() => setScoreDetail(null)} />}
+      {previewId && (
+        <ArticlePreview
+          itemId={previewId}
+          onClose={() => setPreviewId(null)}
+          onAction={async (id, action, notes) => {
+            try {
+              await reviewContent(id, action, notes);
+              setItems(prev => prev.map(i =>
+                i.id === id ? { ...i, status: action === "approve" ? "approved" : "draft" } : i
+              ));
+              addToast(
+                action === "approve" ? "Artículo aprobado" : `Artículo rechazado${notes ? " con feedback" : ""}`,
+                action === "approve"
+              );
+              setPreviewId(null);
+            } catch { addToast("Error al procesar", false); }
+          }}
+        />
+      )}
 
       {/* Toast stack */}
       {toasts.length > 0 && (
@@ -308,12 +483,18 @@ function ContentPageContent() {
                   return (
                     <tr key={item.id}>
                       <td style={{ maxWidth: "280px", minWidth: 0 }}>
-                        <span
-                          style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--dash-text)", fontWeight: 500 }}
-                          title={item.title}
+                        <button
+                          onClick={() => setPreviewId(item.id)}
+                          style={{
+                            display: "block", overflow: "hidden", textOverflow: "ellipsis",
+                            whiteSpace: "nowrap", color: "var(--dash-text)", fontWeight: 500,
+                            background: "none", border: "none", cursor: "pointer", padding: 0,
+                            textAlign: "left", width: "100%", fontSize: "inherit",
+                          }}
+                          title={`Click para previsualizar: ${item.title}`}
                         >
                           {title}
-                        </span>
+                        </button>
                       </td>
                       <td>
                         <span className="badge badge-gray" style={{ fontSize: "0.6875rem" }}>{brandName}</span>

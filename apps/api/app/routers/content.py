@@ -1,5 +1,6 @@
 """Content generation, review, listing, images."""
 import base64
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 from fastapi.responses import Response
 from typing import Optional
@@ -91,7 +92,7 @@ async def list_content(status: Optional[str] = None, limit: int = 50,
                        site_id: Optional[str] = None):
     try:
         params = {
-            "select": "id,title,slug,keyword,status,site_id,quality_score,humanization_score,created_at,updated_at",
+            "select": "id,title,slug,keyword,status,site_id,quality_score,humanization_score,score_humanity,score_specificity,score_structure,score_seo,score_readability,score_feedback,created_at,updated_at",
             "order": "created_at.desc",
             "limit": str(limit),
         }
@@ -203,7 +204,19 @@ async def review_content(aid: str, action: ContentApprove, bg: BackgroundTasks,
             bg.add_task(_generate_social_drafts_bg, aid, a["site_id"])
 
     elif action.action == "reject":
-        await db.update("content_assets", aid, {"status": "draft"})
+        update_data = {"status": "draft"}
+        if action.notes:
+            existing_meta = a.get("metadata") or {}
+            feedback_history = existing_meta.get("feedback_history", [])
+            feedback_history.append({
+                "feedback": action.notes,
+                "rejected_at": datetime.now(timezone.utc).isoformat(),
+                "previous_score": a.get("quality_score"),
+            })
+            existing_meta["feedback_history"] = feedback_history
+            existing_meta["last_feedback"] = action.notes
+            update_data["metadata"] = existing_meta
+        await db.update("content_assets", aid, update_data)
 
     await audit(request, f"content_{action.action}", "content_assets", aid,
                 {"title": a.get("title"), "notes": action.notes})
