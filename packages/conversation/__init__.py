@@ -189,15 +189,23 @@ INSTRUCCIONES DE COMPORTAMIENTO:
             },
             {
                 "name": "update_intelligence",
-                "description": "Update a field in the client intelligence profile.",
+                "description": (
+                    "Update a field in the client intelligence profile. "
+                    "For JSONB array fields (competitors, target_segments, key_differentiators, pain_points, etc.) "
+                    "use action='array_add' or action='array_remove' to add/remove individual items without "
+                    "overwriting the rest. Use action='replace' (default) for scalar fields or full replacements."
+                ),
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "site_id": {"type": "string"},
-                        "field":   {"type": "string"},
-                        "value":   {},
+                        "site_id":   {"type": "string"},
+                        "field":     {"type": "string", "description": "Profile field name, e.g. 'competitors', 'value_proposition'"},
+                        "action":    {"type": "string", "enum": ["replace", "array_add", "array_remove"],
+                                      "description": "replace=overwrite entire field, array_add=append item to array, array_remove=remove item from array by name"},
+                        "value":     {"description": "For replace: the new value. For array_add: the item object to add (e.g. {\"name\": \"Indufoam\"}). Not needed for array_remove."},
+                        "item_name": {"type": "string", "description": "For array_add/array_remove: the 'name' key value to match/remove (e.g. 'Spring Air')"},
                     },
-                    "required": ["site_id", "field", "value"],
+                    "required": ["site_id", "field"],
                 },
             },
             {
@@ -304,11 +312,32 @@ INSTRUCCIONES DE COMPORTAMIENTO:
                 })
 
             elif tool_name == "update_intelligence":
-                profiles = await db.query("client_profiles", params={"select": "id", "site_id": f"eq.{tool_input['site_id']}", "limit": "1"})
-                if profiles:
-                    await db.update("client_profiles", profiles[0]["id"], {tool_input["field"]: tool_input["value"]})
-                    return json.dumps({"status": "updated", "field": tool_input["field"]})
-                return json.dumps({"status": "error", "detail": "Profile not found"})
+                profiles = await db.query("client_profiles", params={"select": "*", "site_id": f"eq.{tool_input['site_id']}", "limit": "1"})
+                if not profiles:
+                    return json.dumps({"status": "error", "detail": "Profile not found"})
+                profile = profiles[0]
+                field   = tool_input["field"]
+                action  = tool_input.get("action", "replace")
+
+                if action == "replace":
+                    update_value = tool_input["value"]
+                elif action == "array_add":
+                    current = profile.get(field) or []
+                    new_item = tool_input.get("value") or {"name": tool_input.get("item_name", "")}
+                    # Avoid duplicates by name
+                    item_name = tool_input.get("item_name") or (new_item.get("name") if isinstance(new_item, dict) else str(new_item))
+                    current = [i for i in current if (i.get("name") if isinstance(i, dict) else i) != item_name]
+                    current.append(new_item)
+                    update_value = current
+                elif action == "array_remove":
+                    current = profile.get(field) or []
+                    item_name = tool_input.get("item_name", "")
+                    update_value = [i for i in current if (i.get("name") if isinstance(i, dict) else i) != item_name]
+                else:
+                    return json.dumps({"status": "error", "detail": f"Unknown action: {action}"})
+
+                await db.update("client_profiles", profile["id"], {field: update_value})
+                return json.dumps({"status": "updated", "field": field, "action": action})
 
             elif tool_name == "run_cycle":
                 api_url = "http://localhost:8000"
