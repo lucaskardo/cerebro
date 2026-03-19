@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 from typing import Optional
 
 from packages.core import db, create_alert, get_logger, SupabaseError
+from packages.core.scoring import calculate_intent_score
 from apps.api.app.middleware.auth import require_auth, audit
 from apps.api.app.schemas.leads import LeadCapture, LeadTransition, LeadOutcomeCreate
 
@@ -80,6 +81,14 @@ async def capture_lead(lead: LeadCapture, bg: BackgroundTasks, request: Request)
     if lead.calculator_data:
         quiz["calculator"] = lead.calculator_data
 
+    intent_score = calculate_intent_score({
+        "cta_variant":    lead.cta_variant,
+        "quiz_responses": quiz,
+        "telefono":       lead.telefono,
+        "nombre":         lead.nombre,
+        "utm_source":     lead.utm_source,
+    })
+
     try:
         result = await db.insert("leads", {
             "mission_id": mission_id,
@@ -93,7 +102,7 @@ async def capture_lead(lead: LeadCapture, bg: BackgroundTasks, request: Request)
             "utm_content": lead.utm_content,
             "utm_campaign": lead.utm_campaign,
             "tema_interes": lead.tema_interes,
-            "intent_score": lead.intent_score,
+            "intent_score": intent_score,
             "quiz_responses": quiz,
             "visitor_id": lead.visitor_id,
             "session_id": lead.session_id,
@@ -108,7 +117,7 @@ async def capture_lead(lead: LeadCapture, bg: BackgroundTasks, request: Request)
     if result:
         await create_alert(
             "new_lead",
-            f"Nuevo lead: {lead.email} (score: {lead.intent_score})",
+            f"Nuevo lead: {lead.email} (score: {intent_score})",
             action_url="/leads",
         )
         bg.add_task(_send_lead_email, lead)
