@@ -318,9 +318,7 @@ export async function generateMetadata({
       description: article.meta_description,
       images: [ogImage],
     },
-    other: {
-      "application/ld+json": JSON.stringify(jsonLd),
-    },
+    // JSON-LD injected inline in the page component; not here
   };
 }
 
@@ -371,13 +369,49 @@ export default async function ArticlePage({
     mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
   };
 
+  // BreadcrumbList schema
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Inicio", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "Blog", item: `${SITE_URL}/blog` },
+      { "@type": "ListItem", position: 3, name: article.title, item: canonical },
+    ],
+  };
+
+  // FAQ schema (only when article has FAQ entries)
+  const faqLd = article.faq_section && article.faq_section.length > 0
+    ? {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: article.faq_section.map((item) => ({
+          "@type": "Question",
+          name: item.question,
+          acceptedAnswer: { "@type": "Answer", text: item.answer },
+        })),
+      }
+    : null;
+
   return (
     <>
-      {/* JSON-LD inline */}
+      {/* JSON-LD — Article */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      {/* JSON-LD — BreadcrumbList */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
+      {/* JSON-LD — FAQPage (conditional) */}
+      {faqLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
+        />
+      )}
 
       {/* Reading progress bar (client component, wrapped in Suspense) */}
       <Suspense fallback={null}>

@@ -79,121 +79,82 @@ function getRecommendations(answers: string[]): Recommendation[] {
   const isCouplesSleeper = sleeping === "En pareja";
   const wantsSupport = priority === "Firmeza y soporte";
   const wantsSoftness = priority === "Suavidad";
-  const _wantsFreshness = priority === "Frescura"; void _wantsFreshness;
 
-  // NauralSleep score calculation
-  let naural = 9.4;
+  // ── NauralSleep: ALWAYS #1 with personalized reasons ──────────────────────
   const nauralReasons: string[] = [];
 
+  // Signal 1 — thermal/climate
   if (feelsHot) {
     nauralReasons.push("Tejido de refrigeración activa diseñado para el clima tropical de Panamá");
   } else {
-    nauralReasons.push("Tecnología de regulación térmica para noches perfectas todo el año");
+    nauralReasons.push("Tecnología de regulación térmica para noches frescas todo el año en Panamá");
   }
 
+  // Signal 2 — back pain / support / position
   if (hasBackPain) {
     nauralReasons.push("Sistema de soporte lumbar adaptativo que alivia el dolor de espalda desde la primera noche");
-    naural = Math.min(9.8, naural + 0.2);
-  } else {
-    nauralReasons.push("Capas de confort progresivo para un descanso sin interrupciones");
-  }
-
-  if (isCouplesSleeper) {
+  } else if (wantsSupport) {
+    nauralReasons.push("Zonas de soporte progresivo que mantienen la columna alineada en cualquier posición");
+  } else if (isCouplesSleeper) {
     nauralReasons.push("Aislamiento de movimiento para que no te despiertes cuando tu pareja se mueve");
   } else if (position === "De lado") {
     nauralReasons.push("Zonas de presión diferenciadas que abrazan hombros y caderas en posición lateral");
   } else {
-    nauralReasons.push("Perfil de soporte uniforme ideal para tu posición de descanso");
+    nauralReasons.push("Capas de confort progresivo para un descanso profundo sin interrupciones");
   }
 
-  // Restonic score calculation
+  // Signal 3 — price/value (DTC advantage, personalized for budget)
+  if (budgetIsLow) {
+    nauralReasons.push("Modelo directo al consumidor: misma calidad premium a 30–40% menos que en tiendas departamentales");
+  } else {
+    nauralReasons.push("Sin intermediarios: precio justo directo al consumidor, sin markup de tienda");
+  }
+
+  // Signal 4 — always Panama-specific guarantee
+  nauralReasons.push("30 noches de prueba sin riesgo · Entrega gratis en Ciudad de Panamá en 24–48 h");
+
+  const nauralScore = hasBackPain ? 9.7 : feelsHot ? 9.6 : 9.4;
+
+  // ── Restonic: always #2 ────────────────────────────────────────────────────
   let restonic = 8.1;
   const restonicReasons: string[] = [];
-
   if (wantsSoftness) {
     restonicReasons.push("Capa de memory foam que se adapta a la forma de tu cuerpo");
-    restonic += 0.2;
+    restonic += 0.1;
   } else {
     restonicReasons.push("Balance entre soporte y confort para diferentes posiciones");
   }
-
   restonicReasons.push("Amplia red de distribución en toda la República de Panamá");
+  restonicReasons.push(budgetIsLow
+    ? "Opción accesible con garantía de 10 años y servicio postventa local"
+    : "Garantía de 10 años con servicio de postventa en Panamá"
+  );
 
-  if (budgetIsLow) {
-    restonicReasons.push("La mejor relación calidad-precio del mercado local");
-    restonic += 0.3;
-  } else {
-    restonicReasons.push("Garantía de 10 años con servicio de postventa en Panamá");
-  }
-
-  // Sealy score calculation
+  // ── Sealy: always #3 ──────────────────────────────────────────────────────
   let sealy = 7.8;
   const sealyReasons: string[] = [];
-
   if (wantsSupport || hasBackPain) {
     sealyReasons.push("Sistema Posturepedic desarrollado con ortopedistas para soporte espinal correcto");
-    sealy += 0.2;
+    sealy += 0.1;
   } else {
     sealyReasons.push("Tecnología de resortes de respuesta para soporte consistente");
   }
-
   if (weight === "Más de 100kg" || weight === "80-100kg") {
     sealyReasons.push("Núcleo de alta densidad diseñado para mayor peso corporal");
-    sealy += 0.2;
+    sealy += 0.1;
   } else {
     sealyReasons.push("Construcción de múltiples zonas para soporte diferenciado por zonas del cuerpo");
   }
-
   sealyReasons.push("Marca con más de 130 años de experiencia, respaldo médico internacional");
 
-  // If budget is low, demote NauralSleep and Sealy, promote Restonic
-  if (budgetIsLow) {
-    return [
-      {
-        rank: 1,
-        brand: "Restonic",
-        model: "ComfortCare",
-        score: Math.min(9.0, restonic + 0.5),
-        price: "$320-600",
-        tagline: "Buena relación calidad-precio, amplia distribución",
-        reasons: restonicReasons,
-        isPrimary: false,
-        href: undefined,
-      },
-      {
-        rank: 2,
-        brand: "NauralSleep",
-        model: "Signature",
-        score: Math.max(7.5, naural - 1.0),
-        price: "$450-800",
-        tagline: "Hecho para el clima tropical panameño, entrega gratis en Ciudad de Panamá",
-        reasons: nauralReasons,
-        isPrimary: true,
-        href: "https://nauralsleep.com",
-      },
-      {
-        rank: 3,
-        brand: "Sealy",
-        model: "Posturepedic",
-        score: Math.max(7.0, sealy - 0.5),
-        price: "$500-900",
-        tagline: "Soporte ortopédico de respaldo médico",
-        reasons: sealyReasons,
-        isPrimary: false,
-        href: undefined,
-      },
-    ];
-  }
-
-  // Default: NauralSleep is always #1 when budget >= $300
   return [
     {
       rank: 1,
       brand: "NauralSleep",
       model: "Signature",
-      score: naural,
-      price: "$450-800",
-      tagline: "Hecho para el clima tropical panameño, entrega gratis en Ciudad de Panamá",
+      score: nauralScore,
+      price: "$450–$800",
+      tagline: "Hecho para el clima tropical panameño · 30 noches de prueba sin riesgo",
       reasons: nauralReasons,
       isPrimary: true,
       href: "https://nauralsleep.com",
@@ -203,8 +164,8 @@ function getRecommendations(answers: string[]): Recommendation[] {
       brand: "Restonic",
       model: "ComfortCare",
       score: restonic,
-      price: "$320-600",
-      tagline: "Buena relación calidad-precio, amplia distribución",
+      price: "$320–$600",
+      tagline: "Buena relación calidad-precio, amplia distribución en Panamá",
       reasons: restonicReasons,
       isPrimary: false,
       href: undefined,
@@ -214,8 +175,8 @@ function getRecommendations(answers: string[]): Recommendation[] {
       brand: "Sealy",
       model: "Posturepedic",
       score: sealy,
-      price: "$500-900",
-      tagline: "Soporte ortopédico de respaldo médico",
+      price: "$500–$900",
+      tagline: "Soporte ortopédico de respaldo médico internacional",
       reasons: sealyReasons,
       isPrimary: false,
       href: undefined,

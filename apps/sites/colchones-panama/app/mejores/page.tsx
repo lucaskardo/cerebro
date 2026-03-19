@@ -1,9 +1,29 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 
-export const metadata = {
+const SITE_URL = "https://colchonespanama.com";
+
+export const metadata: Metadata = {
   title: "Los Mejores Colchones en Panamá 2026",
   description:
-    "Ranking actualizado de los mejores colchones disponibles en Panamá. Comparativa independiente evaluada por especialistas.",
+    "Ranking actualizado de los mejores colchones disponibles en Panamá. Comparativa independiente evaluada por especialistas en ergonomía del sueño.",
+  alternates: { canonical: `${SITE_URL}/mejores` },
+  openGraph: {
+    type: "article",
+    locale: "es_PA",
+    url: `${SITE_URL}/mejores`,
+    siteName: "ColchonesPanamá",
+    title: "Los Mejores Colchones en Panamá 2026",
+    description:
+      "Ranking actualizado de los mejores colchones disponibles en Panamá. Comparativa independiente evaluada por especialistas.",
+    images: [{ url: `${SITE_URL}/og-default.jpg`, width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Los Mejores Colchones en Panamá 2026",
+    description: "Ranking actualizado de los mejores colchones disponibles en Panamá.",
+    images: [`${SITE_URL}/og-default.jpg`],
+  },
 };
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -319,8 +339,50 @@ function MattressCard({ m }: { m: Mattress }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function MejoresPage() {
+  const itemListLd = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "Los Mejores Colchones en Panamá 2026",
+    description: "Ranking de colchones evaluados por especialistas en ergonomía del sueño",
+    url: `${SITE_URL}/mejores`,
+    numberOfItems: mattresses.length,
+    itemListElement: mattresses.map((m) => ({
+      "@type": "ListItem",
+      position: m.rank,
+      name: `${m.brand} ${m.model}`,
+      url: m.rank === 1 ? m.ctaStore : `${SITE_URL}${m.ctaReview}`,
+    })),
+  };
+
+  const nauralProductLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: "NauralSleep Signature",
+    description:
+      "Colchón híbrido diseñado para el clima tropical de Panamá. Directo al consumidor, entrega gratis en Ciudad de Panamá, 30 noches de prueba.",
+    brand: { "@type": "Brand", name: "NauralSleep" },
+    offers: {
+      "@type": "Offer",
+      url: "https://nauralsleep.com",
+      priceCurrency: "USD",
+      price: "450",
+      priceValidUntil: "2026-12-31",
+      availability: "https://schema.org/InStock",
+      seller: { "@type": "Organization", name: "NauralSleep" },
+    },
+    aggregateRating: {
+      "@type": "AggregateRating",
+      ratingValue: "9.4",
+      bestRating: "10",
+      worstRating: "1",
+      reviewCount: "1",
+    },
+  };
+
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(nauralProductLd) }} />
       {/* ── Hero ── */}
       <section
         className="relative overflow-hidden py-20 md:py-28"
