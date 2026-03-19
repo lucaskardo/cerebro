@@ -127,6 +127,38 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
             "humanization_score": humanized.get("humanization_score", 0),
         })
 
+        # STEP 3.5: Score (5 dimensions)
+        logger.info(f"[{run_id}] Step 3.5/4: Scoring content quality...")
+        try:
+            from packages.content.scorer import score_content
+            site_context = brand.get("client_intelligence") or brand.get("partner_name", "")
+            scores = await score_content(
+                title=humanized.get("title", keyword),
+                body_md=humanized.get("body_md", ""),
+                keyword=keyword,
+                site_context=site_context,
+                run_id=run_id,
+            )
+            score_update = {
+                "score_humanity":    scores["humanity"],
+                "score_specificity": scores["specificity"],
+                "score_structure":   scores["structure"],
+                "score_seo":         scores["seo"],
+                "score_readability": scores["readability"],
+                "score_feedback":    scores.get("feedback", ""),
+            }
+            # If total < 65 mark as low_quality in metadata
+            if scores["total"] < 65:
+                existing_asset = await db.get_by_id("content_assets", asset_id)
+                meta = (existing_asset or {}).get("metadata") or {}
+                meta["low_quality"] = True
+                meta["quality_score_total"] = scores["total"]
+                score_update["metadata"] = meta
+            await db.update("content_assets", asset_id, score_update)
+        except Exception as e:
+            logger.warning(f"[{run_id}] Scoring step failed (non-fatal): {e}")
+            scores = {"total": 0}
+
         # STEP 4: Validate
         logger.info(f"[{run_id}] Step 4/4: Validating...")
         validation = _validate(humanized, keyword, brand)
@@ -141,10 +173,18 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         logger.info(f"[{run_id}] Pipeline complete: {status} (quality={validation['quality_score']})")
 
         # Alert operator
+        score_total = scores.get("total", 0) if isinstance(scores, dict) else 0
+        low_q = score_total > 0 and score_total < 65
+        alert_msg = f"'{humanized.get('title', keyword)}' → {status} (calidad: {validation['quality_score']}%"
+        if score_total:
+            alert_msg += f", AI score: {score_total}/100"
+        if low_q:
+            alert_msg += " ⚠ baja calidad"
+        alert_msg += ")"
         await create_alert(
             "content_ready" if status == "review" else "content_needs_work",
-            f"'{humanized.get('title', keyword)}' → {status} (score: {validation['quality_score']})",
-            severity="info" if status == "review" else "warning",
+            alert_msg,
+            severity="warning" if low_q else ("info" if status == "review" else "warning"),
             action_url=f"/dashboard/content/{asset_id}",
             action_label="Revisar" if status == "review" else "Editar",
         )

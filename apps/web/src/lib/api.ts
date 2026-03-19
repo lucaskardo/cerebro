@@ -32,6 +32,12 @@ export interface ContentAsset {
   status: "generating" | "draft" | "review" | "approved" | "error";
   quality_score: number | null;
   humanization_score: number | null;
+  score_humanity: number | null;
+  score_specificity: number | null;
+  score_structure: number | null;
+  score_seo: number | null;
+  score_readability: number | null;
+  score_feedback: string | null;
   site_id: string | null;
   created_at: string;
   updated_at: string;

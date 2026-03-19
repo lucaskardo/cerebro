@@ -96,6 +96,7 @@ function SystemContent() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
   const [dismissing, setDismissing] = useState<Set<string>>(new Set());
+  const [sendingBriefing, setSendingBriefing] = useState(false);
 
   const showToast = (msg: string, type: Toast["type"] = "info") => {
     setToast({ msg, type });
@@ -218,6 +219,24 @@ function SystemContent() {
     }
   };
 
+  const sendTestBriefing = async () => {
+    if (!siteId) { showToast("Selecciona un site primero (usa el selector de marca arriba)", "error"); return; }
+    setSendingBriefing(true);
+    try {
+      const res = await fetch(`${API_URL}/api/briefing/generate`, {
+        method: "POST",
+        headers: authHdrs(),
+        body: JSON.stringify({ site_id: siteId }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      showToast("Briefing enviado al email configurado ✓", "success");
+    } catch (e) {
+      showToast(`Error enviando briefing: ${e}`, "error");
+    } finally {
+      setSendingBriefing(false);
+    }
+  };
+
   const filteredAudit = auditSearch
     ? audit.filter((e) =>
         e.action.toLowerCase().includes(auditSearch.toLowerCase()) ||
@@ -266,6 +285,29 @@ function SystemContent() {
           )}
         </div>
       )}
+
+      {/* Daily Briefing */}
+      <div className="dash-card" style={{ padding: "0.875rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+        <div>
+          <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--dash-text)" }}>Daily Briefing</div>
+          <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", marginTop: "2px" }}>
+            Envía un resumen de actividad al email del operador
+          </div>
+        </div>
+        <button
+          onClick={sendTestBriefing}
+          disabled={sendingBriefing}
+          style={{
+            padding: "0.5rem 1.125rem", borderRadius: "7px", fontSize: "0.8125rem",
+            fontWeight: 600, border: "1px solid var(--dash-accent)",
+            background: "var(--dash-accent-dim)", color: "var(--dash-accent)",
+            cursor: sendingBriefing ? "not-allowed" : "pointer",
+            opacity: sendingBriefing ? 0.6 : 1, whiteSpace: "nowrap",
+          }}
+        >
+          {sendingBriefing ? "Enviando…" : "Send Test Briefing"}
+        </button>
+      </div>
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: "0.25rem", borderBottom: "1px solid var(--dash-border)" }}>

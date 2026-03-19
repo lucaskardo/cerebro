@@ -25,6 +25,80 @@ function truncate(str: string, max: number) {
   return str.length > max ? str.slice(0, max) + "…" : str;
 }
 
+function scoreColor(score: number | null) {
+  if (score == null) return "var(--dash-text-dim)";
+  if (score >= 80) return "var(--dash-accent)";
+  if (score >= 65) return "#f59e0b";
+  return "#ef4444";
+}
+
+function ScoreBar({ label, value }: { label: string; value: number | null }) {
+  const v = value ?? 0;
+  const color = scoreColor(value);
+  return (
+    <div style={{ marginBottom: "10px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+        <span style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>{label}</span>
+        <span style={{ fontSize: "0.75rem", fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>{v}</span>
+      </div>
+      <div style={{ height: "5px", background: "var(--dash-border)", borderRadius: "3px", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${v}%`, background: color, borderRadius: "3px", transition: "width 0.3s" }} />
+      </div>
+    </div>
+  );
+}
+
+function ScoreDetail({ item, onClose }: { item: ContentAsset; onClose: () => void }) {
+  const total = item.score_humanity != null
+    ? Math.round((item.score_humanity * 0.25) + ((item.score_specificity ?? 0) * 0.25) + ((item.score_structure ?? 0) * 0.2) + ((item.score_seo ?? 0) * 0.2) + ((item.score_readability ?? 0) * 0.1))
+    : null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 300,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }} onClick={onClose}>
+      <div style={{
+        background: "var(--dash-card)", border: "1px solid var(--dash-border)", borderRadius: "12px",
+        padding: "1.5rem", width: "100%", maxWidth: "420px", boxShadow: "0 24px 48px rgba(0,0,0,0.5)",
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
+          <div>
+            <div style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--dash-text)", marginBottom: "2px" }}>
+              {truncate(item.title, 50)}
+            </div>
+            <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>Score de calidad IA</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--dash-text-dim)", fontSize: "1.25rem", lineHeight: 1 }}>×</button>
+        </div>
+
+        {total != null ? (
+          <>
+            <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
+              <span style={{ fontSize: "2.5rem", fontWeight: 800, color: scoreColor(total), fontFamily: "'JetBrains Mono', monospace" }}>{total}</span>
+              <span style={{ fontSize: "1rem", color: "var(--dash-text-dim)" }}>/100</span>
+            </div>
+            <ScoreBar label="Humanidad" value={item.score_humanity} />
+            <ScoreBar label="Especificidad" value={item.score_specificity} />
+            <ScoreBar label="Estructura" value={item.score_structure} />
+            <ScoreBar label="SEO" value={item.score_seo} />
+            <ScoreBar label="Legibilidad" value={item.score_readability} />
+            {item.score_feedback && (
+              <div style={{ marginTop: "1rem", padding: "0.75rem", background: "var(--dash-bg)", borderRadius: "8px", border: "1px solid var(--dash-border)" }}>
+                <div style={{ fontSize: "0.6875rem", color: "var(--dash-text-dim)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Feedback</div>
+                <div style={{ fontSize: "0.8125rem", color: "var(--dash-text)", lineHeight: 1.6 }}>{item.score_feedback}</div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ textAlign: "center", color: "var(--dash-text-dim)", fontSize: "0.8125rem", padding: "1rem 0" }}>
+            Score no disponible — artículos nuevos se evalúan automáticamente durante generación.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface Toast { id: number; msg: string; ok: boolean; }
 
 function ContentPageContent() {
@@ -42,6 +116,7 @@ function ContentPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [actioning, setActioning] = useState<Record<string, boolean>>({});
+  const [scoreDetail, setScoreDetail] = useState<ContentAsset | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -109,6 +184,8 @@ function ContentPageContent() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+      {scoreDetail && <ScoreDetail item={scoreDetail} onClose={() => setScoreDetail(null)} />}
+
       {/* Toast stack */}
       {toasts.length > 0 && (
         <div style={{ position: "fixed", bottom: "1.5rem", right: "1.5rem", zIndex: 200, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -204,6 +281,7 @@ function ContentPageContent() {
                   <th>Keyword</th>
                   <th>Estado</th>
                   <th style={{ textAlign: "right" }}>Calidad</th>
+                  <th style={{ textAlign: "right" }}>AI Score</th>
                   <th>Fecha</th>
                   <th>Acciones</th>
                 </tr>
@@ -221,6 +299,12 @@ function ContentPageContent() {
                       : "#ff4d4d";
                   const brandName = item.site_id ? (siteMap[item.site_id] ?? item.site_id.slice(0, 8) + "…") : "—";
                   const isLoading = actioning[item.id];
+
+                  // Compute AI total from 5 dimensions
+                  const aiTotal = item.score_humanity != null
+                    ? Math.round((item.score_humanity * 0.25) + ((item.score_specificity ?? 0) * 0.25) + ((item.score_structure ?? 0) * 0.2) + ((item.score_seo ?? 0) * 0.2) + ((item.score_readability ?? 0) * 0.1))
+                    : null;
+
                   return (
                     <tr key={item.id}>
                       <td style={{ maxWidth: "280px", minWidth: 0 }}>
@@ -244,6 +328,23 @@ function ContentPageContent() {
                         <span className="mono" style={{ fontSize: "0.8125rem", fontWeight: 600, color: qualColor }}>
                           {item.quality_score != null ? `${item.quality_score}/100` : "—"}
                         </span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        {aiTotal != null ? (
+                          <button
+                            onClick={() => setScoreDetail(item)}
+                            style={{
+                              background: "none", border: "none", cursor: "pointer", padding: 0,
+                              fontFamily: "'JetBrains Mono', monospace", fontSize: "0.8125rem", fontWeight: 700,
+                              color: scoreColor(aiTotal),
+                            }}
+                            title="Ver desglose de score"
+                          >
+                            {aiTotal} ↗
+                          </button>
+                        ) : (
+                          <span style={{ color: "var(--dash-text-dim)", fontSize: "0.75rem" }}>—</span>
+                        )}
                       </td>
                       <td>
                         <span style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>{formatDate(item.created_at)}</span>

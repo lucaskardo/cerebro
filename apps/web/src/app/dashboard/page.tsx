@@ -5,6 +5,14 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { api, reviewContent, type Lead, type Approval, type ContentAsset } from "@/lib/api";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
+function authHdrs(): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (API_KEY) h["x-api-key"] = API_KEY;
+  return h;
+}
+
 interface CycleRun {
   id: string; status: string;
   opportunities_generated: number; experiments_created: number;
@@ -67,6 +75,8 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
+  const [briefingPreview, setBriefingPreview] = useState<{ subject: string; body_text: string } | null>(null);
+  const [loadingBriefing, setLoadingBriefing] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -95,6 +105,24 @@ function DashboardContent() {
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
+  }
+
+  async function loadBriefingPreview() {
+    if (!siteId) return;
+    setLoadingBriefing(true);
+    try {
+      const res = await fetch(`${API_URL}/api/briefing/preview`, {
+        method: "POST",
+        headers: authHdrs(),
+        body: JSON.stringify({ site_id: siteId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBriefingPreview({ subject: data.subject, body_text: data.body_text });
+      }
+    } catch { /* non-fatal */ } finally {
+      setLoadingBriefing(false);
+    }
   }
 
   async function approveInline(item: ContentAsset) {
@@ -285,6 +313,48 @@ function DashboardContent() {
           )}
         </div>
       </div>
+
+      {/* Daily Briefing preview */}
+      {siteId && (
+        <div className="dash-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.875rem" }}>
+            <h2 className="section-title" style={{ fontSize: "0.875rem" }}>Daily Briefing</h2>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <button
+                onClick={loadBriefingPreview}
+                disabled={loadingBriefing}
+                style={{
+                  background: "transparent", border: "1px solid var(--dash-border)", borderRadius: "4px",
+                  color: "var(--dash-text-dim)", fontSize: "0.6875rem", padding: "0.25rem 0.625rem",
+                  cursor: loadingBriefing ? "not-allowed" : "pointer", opacity: loadingBriefing ? 0.6 : 1,
+                }}
+              >
+                {loadingBriefing ? "Generando…" : "Ver preview"}
+              </button>
+              <Link href="/dashboard/system" style={{ fontSize: "0.7rem", color: "var(--dash-accent)" }}>Enviar →</Link>
+            </div>
+          </div>
+          {briefingPreview ? (
+            <div>
+              <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--dash-text)", marginBottom: "0.75rem" }}>
+                {briefingPreview.subject}
+              </div>
+              <pre style={{
+                fontSize: "0.75rem", color: "var(--dash-text-dim)", lineHeight: 1.6,
+                whiteSpace: "pre-wrap", fontFamily: "inherit", margin: 0,
+                background: "var(--dash-bg)", padding: "0.75rem", borderRadius: "6px",
+                border: "1px solid var(--dash-border)", maxHeight: "200px", overflowY: "auto",
+              }}>
+                {briefingPreview.body_text}
+              </pre>
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: "1rem 0", color: "var(--dash-text-dim)", fontSize: "0.8125rem" }}>
+              Haz click en "Ver preview" para generar el resumen de hoy
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Recent cycles */}
       <div className="dash-card">
