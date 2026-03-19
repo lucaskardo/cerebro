@@ -1,0 +1,164 @@
+"""Intelligence v2 router — structured intelligence layer endpoints."""
+from fastapi import APIRouter, Depends, Query
+from typing import Optional, List
+
+from packages.core import db, get_logger
+from apps.api.app.middleware.auth import require_auth
+from apps.api.app.schemas.intelligence_v2 import (
+    EntityOut, FactOut, InsightOut, DiscoveryCandidateOut,
+    DecideDiscoveryRequest, CompletenessRow, ResearchRunOut,
+)
+# Module-level import makes it patchable in tests
+from packages.intelligence.migrate import run_migration as _run_migration
+
+logger = get_logger("router.intelligence_v2")
+router = APIRouter(tags=["Intelligence"], prefix="/api/v2/intelligence")
+
+
+@router.get("/entities/{site_id}", response_model=List[EntityOut],
+            dependencies=[Depends(require_auth)])
+async def list_entities(
+    site_id: str,
+    type: Optional[str] = Query(None, description="Filter by entity_type"),
+    status: Optional[str] = Query("active"),
+):
+    try:
+        params = {
+            "select": "*",
+            "site_id": f"eq.{site_id}",
+            "order": "entity_type.asc,name.asc",
+        }
+        if type:
+            params["entity_type"] = f"eq.{type}"
+        if status:
+            params["status"] = f"eq.{status}"
+        return await db.query("intelligence_entities", params=params)
+    except Exception as e:
+        logger.error(f"list_entities {site_id}: {e}", exc_info=True)
+        return []
+
+
+@router.get("/facts/{site_id}", response_model=List[FactOut],
+            dependencies=[Depends(require_auth)])
+async def list_facts(
+    site_id: str,
+    category: Optional[str] = Query(None),
+    entity_id: Optional[str] = Query(None),
+    quarantined: Optional[bool] = Query(None),
+    limit: int = Query(100, le=500),
+):
+    try:
+        params = {
+            "select": "*",
+            "site_id": f"eq.{site_id}",
+            "order": "utility_score.desc,confidence.desc",
+            "limit": str(limit),
+        }
+        if category:
+            params["category"] = f"eq.{category}"
+        if entity_id:
+            params["entity_id"] = f"eq.{entity_id}"
+        if quarantined is not None:
+            params["quarantined"] = f"eq.{str(quarantined).lower()}"
+        return await db.query("intelligence_facts", params=params)
+    except Exception as e:
+        logger.error(f"list_facts {site_id}: {e}", exc_info=True)
+        return []
+
+
+@router.get("/insights/{site_id}", response_model=List[InsightOut],
+            dependencies=[Depends(require_auth)])
+async def list_insights(
+    site_id: str,
+    status: Optional[str] = Query("active"),
+    insight_type: Optional[str] = Query(None),
+):
+    try:
+        params = {
+            "select": "*",
+            "site_id": f"eq.{site_id}",
+            "order": "impact_score.desc",
+        }
+        if status:
+            params["status"] = f"eq.{status}"
+        if insight_type:
+            params["insight_type"] = f"eq.{insight_type}"
+        return await db.query("intelligence_insights", params=params)
+    except Exception as e:
+        logger.error(f"list_insights {site_id}: {e}", exc_info=True)
+        return []
+
+
+@router.get("/discoveries/{site_id}", response_model=List[DiscoveryCandidateOut],
+            dependencies=[Depends(require_auth)])
+async def list_discoveries(
+    site_id: str,
+    status: Optional[str] = Query("proposed"),
+):
+    try:
+        params = {
+            "select": "*",
+            "site_id": f"eq.{site_id}",
+            "order": "created_at.desc",
+        }
+        if status:
+            params["status"] = f"eq.{status}"
+        return await db.query("discovery_candidates", params=params)
+    except Exception as e:
+        logger.error(f"list_discoveries {site_id}: {e}", exc_info=True)
+        return []
+
+
+@router.post("/discoveries/{discovery_id}/decide",
+             dependencies=[Depends(require_auth)])
+async def decide_discovery(discovery_id: str, body: DecideDiscoveryRequest):
+    # body.status is validated by Pydantic Literal["approved", "rejected"]
+    try:
+        from datetime import datetime, timezone
+        updated = await db.update("discovery_candidates", discovery_id, {
+            "status": body.status,
+            "decision_reason": body.reason,
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return updated or {"error": "not found"}
+    except Exception as e:
+        logger.error(f"decide_discovery {discovery_id}: {e}", exc_info=True)
+        return {"error": str(e)}
+
+
+@router.get("/completeness/{site_id}", dependencies=[Depends(require_auth)])
+async def get_completeness(site_id: str):
+    try:
+        rows = await db.rpc("check_entity_completeness", {"p_site_id": site_id})
+        return rows or []
+    except Exception as e:
+        logger.error(f"get_completeness {site_id}: {e}", exc_info=True)
+        return []
+
+
+@router.get("/research/{site_id}", response_model=List[ResearchRunOut],
+            dependencies=[Depends(require_auth)])
+async def list_research_runs(site_id: str, limit: int = Query(20, le=100)):
+    try:
+        return await db.query("research_runs", params={
+            "select": "*",
+            "site_id": f"eq.{site_id}",
+            "order": "started_at.desc",
+            "limit": str(limit),
+        })
+    except Exception as e:
+        logger.error(f"list_research_runs {site_id}: {e}", exc_info=True)
+        return []
+
+
+@router.post("/migrate/{site_id}", dependencies=[Depends(require_auth)])
+async def migrate_site(site_id: str):
+    """Seed structured intelligence layer from existing client_profiles + products data."""
+    try:
+        counts = await _run_migration(site_id)
+        return {"ok": True, "counts": counts}
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        logger.error(f"migration {site_id}: {e}", exc_info=True)
+        return {"ok": False, "error": str(e)}
