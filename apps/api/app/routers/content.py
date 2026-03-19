@@ -54,6 +54,27 @@ async def _run_pipeline_bg(keyword: str, mission_id: str, asset_id: str, site_id
         })
     except Exception as e:
         logger.error(f"Background pipeline failed: {e}")
+        # run_pipeline already sets status=error and re-raises, but guard here too
+        try:
+            asset = await db.get_by_id("content_assets", asset_id)
+            if asset and asset.get("status") == "generating":
+                await db.update("content_assets", asset_id, {
+                    "status": "error",
+                    "error_message": str(e)[:500],
+                })
+        except Exception:
+            pass
+    except BaseException as e:
+        # Catches asyncio.CancelledError (process shutdown/Railway restart)
+        logger.error(f"Pipeline cancelled/killed: {keyword} ({asset_id}): {e}")
+        try:
+            await db.update("content_assets", asset_id, {
+                "status": "error",
+                "error_message": "Pipeline interrupted (process restart)",
+            })
+        except Exception:
+            pass
+        raise
 
 
 async def _generate_social_drafts_bg(asset_id: str, site_id: str):

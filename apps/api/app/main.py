@@ -77,6 +77,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Prompt seed failed (non-fatal): {e}")
 
+    # Reset any articles stuck in 'generating' from a prior crashed process
+    try:
+        from packages.core import db
+        stuck = await db.query("content_assets", params={
+            "select": "id,keyword",
+            "status": "eq.generating",
+            "limit": "200",
+        })
+        if stuck:
+            logger.warning(f"Startup: resetting {len(stuck)} stuck 'generating' articles to 'error'")
+            for row in stuck:
+                await db.update("content_assets", row["id"], {
+                    "status": "error",
+                    "error_message": "Reset on startup: process restarted mid-pipeline",
+                })
+    except Exception as e:
+        logger.warning(f"Startup stuck-article reset failed (non-fatal): {e}")
+
     # Start job worker + maintenance scheduler in background
     from packages.jobs import run_worker, run_scheduler
     worker_task    = asyncio.create_task(run_worker(interval_seconds=30))
