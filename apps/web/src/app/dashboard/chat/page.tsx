@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -44,7 +44,7 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString("es-PA", { month: "short", day: "numeric" });
 }
 
-export default function ChatPage() {
+function ChatInner() {
   const searchParams = useSearchParams();
   const siteId = searchParams.get("site_id") || "";
 
@@ -465,5 +465,13 @@ export default function ChatPage() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "2rem", color: "var(--dash-text-dim)" }}>Cargando…</div>}>
+      <ChatInner />
+    </Suspense>
   );
 }
