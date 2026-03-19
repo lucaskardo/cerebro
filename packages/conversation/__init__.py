@@ -245,6 +245,12 @@ INSTRUCCIONES DE COMPORTAMIENTO:
                 return json.dumps({"count": len(leads), "leads": leads[:15]}, default=str)
 
             elif tool_name == "get_content_performance":
+                try:
+                    from packages.intelligence.performance_analyzer import analyze_content_performance
+                    perf = await analyze_content_performance(tool_input["site_id"])
+                    return json.dumps(perf, default=str, ensure_ascii=False)
+                except Exception:
+                    pass
                 articles = await db.query("content_assets", params={
                     "select": "id,title,slug,status,quality_score,created_at",
                     "site_id": f"eq.{tool_input['site_id']}",

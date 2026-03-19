@@ -108,6 +108,13 @@ async def generate_daily_briefing(site_id: str) -> dict:
     except Exception:
         articles_with_leads = []
 
+    # ── Performance analysis ───────────────────────────────────────────────────
+    try:
+        from packages.intelligence.performance_analyzer import analyze_content_performance
+        perf = await analyze_content_performance(site_id)
+    except Exception:
+        perf = {"insights": [], "recommendations": [], "top_performers": [], "best_topic_cluster": None}
+
     # ── Synthesize with Haiku ──────────────────────────────────────────────────
     data_summary = {
         "leads_yesterday": len(leads_24h),
@@ -124,6 +131,9 @@ async def generate_daily_briefing(site_id: str) -> dict:
         "top_leads_by_intent": [{"email": l["email"], "score": l.get("intent_score", 0), "tema": l.get("tema_interes", "")} for l in leads_24h[:3]],
         "experiments_running": [e.get("hypothesis", "")[:80] for e in experiments[:3]],
         "new_insights_list": [i.get("insight", "")[:100] for i in new_insights[:3]],
+        "performance_insights": perf.get("insights", [])[:3],
+        "performance_recommendations": perf.get("recommendations", [])[:2],
+        "best_topic_cluster": perf.get("best_topic_cluster"),
     }
 
     try:
@@ -137,7 +147,7 @@ Respond in JSON:
 {{
   "what_cerebro_did": "2-3 sentences: articles generated, experiments created, what was automated",
   "results": "2-3 sentences: leads captured, intent scores, which articles drove leads",
-  "whats_working": "1-2 sentences: top performing asset or approach",
+  "whats_working": "1-2 sentences: específicamente qué artículo/topic está convirtiendo leads, con datos de performance_insights si disponibles",
   "planned_today": "1-2 sentences: pending approvals, next content in pipeline",
   "needs_input": "1-2 sentences: items waiting for operator decision",
   "subject_line": "Email subject, max 60 chars, include key number"

@@ -39,6 +39,7 @@ class ProfilePatch(BaseModel):
     weaknesses: Optional[List] = None
     core_competencies: Optional[List] = None
     target_segments: Optional[List] = None
+    persona_voice: Optional[dict] = None
 
 
 class RefreshRequest(BaseModel):
@@ -101,6 +102,17 @@ async def get_research_log(site_id: str, limit: int = 50):
         "limit": str(limit),
     })
     return rows
+
+
+@router.get("/performance/{site_id}", dependencies=[Depends(require_auth)])
+async def get_performance(site_id: str):
+    """Analyze content performance: top articles, insights, recommendations, gaps."""
+    try:
+        from packages.intelligence.performance_analyzer import analyze_content_performance
+        return await analyze_content_performance(site_id)
+    except Exception as e:
+        logger.error(f"Performance analysis failed: {e}", exc_info=True)
+        return {"top_performers": [], "insights": [], "recommendations": [], "content_gaps": [], "total_articles": 0, "total_leads": 0}
 
 
 @router.post("/refresh/{site_id}", dependencies=[Depends(require_auth)])

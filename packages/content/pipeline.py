@@ -36,16 +36,60 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
     # Merge brand config into mission context
     brand = _build_brand_context(mission, site)
 
-    # Get client intelligence context
+    # ── Load content library, intelligence, performance — all site context ──
+    content_library = []
     client_intelligence = ""
+    persona_voice = None
+    performance_insights: dict = {"insights": [], "recommendations": []}
+
     if site_id:
+        # Content library first — needed by context_builder and linker
         try:
-            from packages.intelligence import ClientIntelligence
-            intel = ClientIntelligence()
-            client_intelligence = await intel.get_content_context(site_id)
+            content_library = await db.query("content_assets", params={
+                "select": "id,title,keyword,slug,meta_description",
+                "site_id": f"eq.{site_id}",
+                "status": "eq.approved",
+                "order": "created_at.desc",
+                "limit": "50",
+            })
         except Exception as e:
-            logger.warning(f"[{run_id}] Could not load client intelligence: {e}")
+            logger.warning(f"[{run_id}] Could not load content library: {e}")
+
+        # Focused article context (replaces generic profile dump)
+        try:
+            from packages.intelligence.context_builder import build_article_context
+            client_intelligence = await build_article_context(site_id, keyword, content_library)
+        except Exception as e:
+            logger.warning(f"[{run_id}] context_builder failed, falling back: {e}")
+            try:
+                from packages.intelligence import ClientIntelligence
+                client_intelligence = await ClientIntelligence().get_content_context(site_id)
+            except Exception:
+                pass
+
+        # Performance insights to guide brief
+        try:
+            from packages.intelligence.performance_analyzer import analyze_content_performance
+            performance_insights = await analyze_content_performance(site_id)
+        except Exception as e:
+            logger.warning(f"[{run_id}] Performance analysis failed (non-fatal): {e}")
+
+        # Persona voice for humanization
+        try:
+            profiles = await db.query("client_profiles", params={
+                "select": "persona_voice",
+                "site_id": f"eq.{site_id}",
+                "limit": "1",
+            })
+            if profiles:
+                persona_voice = profiles[0].get("persona_voice")
+        except Exception as e:
+            logger.warning(f"[{run_id}] Could not load persona_voice: {e}")
+
     brand["client_intelligence"] = client_intelligence
+    brand["content_library"] = content_library
+    brand["persona_voice"] = persona_voice
+    brand["performance_insights"] = performance_insights
 
     # Dedup check — skip if very similar keyword already exists for this site
     if site_id:
@@ -77,21 +121,6 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         asset_id = asset["id"]
     else:
         await db.update("content_assets", asset_id, {"status": "generating"})
-
-    # Fetch content library for context (50 most recent approved articles)
-    content_library = []
-    if site_id:
-        try:
-            content_library = await db.query("content_assets", params={
-                "select": "title,keyword,slug,meta_description",
-                "site_id": f"eq.{site_id}",
-                "status": "eq.approved",
-                "order": "created_at.desc",
-                "limit": "50",
-            })
-        except Exception as e:
-            logger.warning(f"[{run_id}] Could not load content library: {e}")
-    brand["content_library"] = content_library
 
     try:
         # STEP 0: Research
@@ -138,13 +167,13 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         # STEP 2.5: Inject internal links into draft body_md
         if content_library:
             try:
-                linked_md = _inject_internal_links_md(
+                from packages.content.linker import inject_internal_links
+                draft["body_md"] = inject_internal_links(
                     body_md=draft.get("body_md", ""),
                     articles=content_library,
                     current_keyword=keyword,
                     current_slug=_slugify(keyword),
                 )
-                draft["body_md"] = linked_md
             except Exception as e:
                 logger.warning(f"[{run_id}] Internal links step failed (non-fatal): {e}")
 
@@ -342,6 +371,17 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
             f"- Primary CTA: {research.get('primary_cta', '')}\n"
         )
 
+    # Performance insights context
+    perf = brand.get("performance_insights", {})
+    performance_context = ""
+    if perf.get("insights") or perf.get("recommendations"):
+        performance_context = (
+            "\n\nPERFORMANCE INSIGHTS (basado en qué contenido está generando leads realmente):\n"
+            + "\n".join(f"- {i}" for i in perf.get("insights", [])[:3])
+            + "\n\nRECOMENDACIONES:\n"
+            + "\n".join(f"- {r}" for r in perf.get("recommendations", [])[:3])
+        )
+
     result = await complete(
         prompt=prompts.BRIEF_USER.format(
             keyword=keyword,
@@ -352,7 +392,7 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
             cta_config=json.dumps(brand.get("cta_config", {}), ensure_ascii=False),
             brand_tone_example=brand.get("brand_tone", "directo, honesto, útil"),
             client_intelligence=brand.get("client_intelligence", ""),
-        ) + research_context + library_context,
+        ) + research_context + library_context + performance_context,
         system=prompts.BRIEF_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "experto en el tema"),
             brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
@@ -370,7 +410,7 @@ async def _generate_brief(keyword: str, brand: dict, research: dict, run_id: str
     # Add content library links as cross-brand linking suggestions
     if content_library:
         cross_links = [
-            f"/articulo/{a['slug']}"
+            f"/blog/{a['slug']}"
             for a in content_library[:5]
             if a.get("slug")
         ]
@@ -446,16 +486,32 @@ async def _generate_draft(brief: dict, brand: dict, run_id: str, sources: list =
 async def _humanize(draft: dict, brand: dict, run_id: str) -> dict:
     audience = brand.get("target_audience", {})
     audience_summary = ", ".join(audience.get("segments", [])) if isinstance(audience, dict) else str(audience)
+
+    persona_voice = brand.get("persona_voice")
+
+    if persona_voice and isinstance(persona_voice, dict):
+        # Use persona-driven humanization
+        system = prompts.HUMANIZE_SYSTEM_PERSONA.format(
+            persona_name=persona_voice.get("name", brand.get("brand_persona", "experto en el tema")),
+            persona_title=persona_voice.get("title", ""),
+            persona_tone=persona_voice.get("tone", brand.get("brand_tone", "directo, honesto, útil")),
+            persona_phrases=json.dumps(persona_voice.get("phrases_uses", [])[:5], ensure_ascii=False),
+            persona_opinions=json.dumps(persona_voice.get("strong_opinions", [])[:3], ensure_ascii=False),
+            persona_style=persona_voice.get("writing_style", ""),
+        )
+    else:
+        system = prompts.HUMANIZE_SYSTEM.format(
+            brand_persona=brand.get("brand_persona", "experto en el tema"),
+            brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
+        )
+
     result = await complete(
         prompt=prompts.HUMANIZE_USER.format(
             title=draft.get("title", ""),
-            body_md=draft.get("body_md", "")[:6000],  # Limit for context window
+            body_md=draft.get("body_md", "")[:6000],
             brand_audience_summary=audience_summary or "personas interesadas en el tema",
         ),
-        system=prompts.HUMANIZE_SYSTEM.format(
-            brand_persona=brand.get("brand_persona", "experto en el tema"),
-            brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
-        ),
+        system=system,
         model="haiku",
         max_tokens=8192,
         json_mode=True,
@@ -463,7 +519,6 @@ async def _humanize(draft: dict, brand: dict, run_id: str) -> dict:
         run_id=run_id,
     )
     parsed = result["parsed"] or {}
-    # Preserve structured data from draft
     parsed.setdefault("faq_section", draft.get("faq_section", []))
     parsed.setdefault("data_claims", draft.get("data_claims", []))
     parsed.setdefault("meta_description", draft.get("meta_description", ""))
@@ -545,120 +600,6 @@ def _inject_utm_params(body_html: str, site_slug: str, asset_id: str) -> str:
 
     # Match href="..." (double quotes only for safety)
     result = re.sub(r'<a\s[^>]*href="([^"]*)"[^>]*>', replace_href, body_html, flags=re.IGNORECASE)
-    return result
-
-
-def _normalize(text: str) -> str:
-    """Lowercase + strip Spanish accents for fuzzy matching."""
-    for a, b in [("á","a"),("é","e"),("í","i"),("ó","o"),("ú","u"),("ü","u"),("ñ","n")]:
-        text = text.replace(a, b).replace(a.upper(), b)
-    return text.lower()
-
-
-def _inject_internal_links_md(
-    body_md: str,
-    articles: list[dict],
-    current_keyword: str,
-    current_slug: str,
-    max_links: int = 5,
-) -> str:
-    """
-    Scan body_md for mentions of existing article keywords and insert markdown links.
-
-    Rules:
-    - 3-5 links max
-    - Never link to the current article
-    - Never link the same article twice
-    - Only replace the FIRST occurrence of each keyword phrase
-    - Skip text already inside a markdown link [...](...) or heading lines
-    - Prefer longer/more specific keyword matches
-    """
-    if not body_md or not articles:
-        return body_md
-
-    current_kw_norm = _normalize(current_keyword)
-
-    # Build candidates sorted by keyword length descending (specific > generic)
-    candidates: list[tuple[str, str, str]] = []  # (keyword, slug, pattern)
-    for art in articles:
-        kw = (art.get("keyword") or "").strip()
-        slug = (art.get("slug") or "").strip()
-        if not kw or not slug:
-            continue
-        # Skip self
-        if slug == current_slug or _normalize(kw) == current_kw_norm:
-            continue
-        candidates.append((kw, slug))
-
-    # Sort by keyword length desc so longer/more specific phrases match first
-    candidates.sort(key=lambda x: len(x[0]), reverse=True)
-
-    # Build a set of ranges already occupied by existing markdown links and headings
-    # so we don't double-link
-    def _occupied_ranges(text: str) -> list[tuple[int, int]]:
-        occupied = []
-        # Existing markdown links: [anchor](url)
-        for m in re.finditer(r'\[([^\]]*)\]\([^)]*\)', text):
-            occupied.append((m.start(), m.end()))
-        # Heading lines (## ...) — skip entirely
-        for m in re.finditer(r'^#{1,6}\s.*$', text, flags=re.MULTILINE):
-            occupied.append((m.start(), m.end()))
-        return occupied
-
-    linked_slugs: set[str] = set()
-    links_added = 0
-    result = body_md
-
-    for kw, slug in candidates:
-        if links_added >= max_links:
-            break
-        if slug in linked_slugs:
-            continue
-
-        kw_norm = _normalize(kw)
-
-        # Build a regex that matches the keyword (or significant subset) in the text,
-        # case-insensitive, with word boundaries, allowing minor accent variation.
-        # We match the normalized version against a normalized copy but replace in original.
-        norm_result = _normalize(result)
-
-        # Try full keyword first, then progressively drop words from the end
-        words = kw.split()
-        matched = False
-        for length in range(len(words), max(1, len(words) - 1) - 1, -1):
-            phrase = " ".join(words[:length])
-            if len(phrase) < 4:
-                continue
-            phrase_norm = _normalize(phrase)
-            pattern = re.compile(
-                r'(?<!\[)(?<!\()(?<!\w)' + re.escape(phrase_norm) + r'(?!\w)(?!\])',
-                flags=re.IGNORECASE,
-            )
-            m = pattern.search(norm_result)
-            if not m:
-                continue
-
-            # Check if this position is inside an existing link or heading
-            occupied = _occupied_ranges(result)
-            start, end = m.start(), m.end()
-            if any(os <= start < oe or os < end <= oe for os, oe in occupied):
-                continue
-
-            # Extract the original text at that position (preserves original casing/accents)
-            original_text = result[start:end]
-            link_md = f"[{original_text}](/articulo/{slug})"
-            result = result[:start] + link_md + result[end:]
-            linked_slugs.add(slug)
-            links_added += 1
-            matched = True
-            break
-
-        if not matched:
-            continue
-
-    if links_added:
-        logger.debug(f"Internal links injected: {links_added} ({list(linked_slugs)})")
-
     return result
 
 

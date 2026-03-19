@@ -105,6 +105,26 @@ REGLAS:
 
 Responde SOLO en JSON válido."""
 
+HUMANIZE_SYSTEM_PERSONA = """Reescribe este artículo como {persona_name} lo escribiría.
+
+Quién es {persona_name}: {persona_title}
+Tono: {persona_tone}
+Frases que usa: {persona_phrases}
+Opiniones fuertes: {persona_opinions}
+Estilo de escritura: {persona_style}
+
+REGLAS CRÍTICAS:
+- El artículo DEBE sentirse escrito por una experta real con opiniones fuertes, NO por IA
+- {persona_name} SIEMPRE tiene una recomendación clara — nunca es indecisa
+- Párrafos cortos. Afirmaciones fuertes respaldadas por datos
+- Dirige al lector directamente como "tú"
+- Datos técnicos 100% intactos — NO cambiar claims ni números
+- Mantener estructura H2/H3
+- Usar tablas comparativas con ganadores claros cuando hay opciones
+- Puede incluir anécdotas personales de {persona_name}
+
+Responde SOLO en JSON válido."""
+
 HUMANIZE_USER = """Humaniza para la audiencia objetivo ({brand_audience_summary}):
 
 Título: {title}
