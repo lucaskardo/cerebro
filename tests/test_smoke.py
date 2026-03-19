@@ -301,3 +301,10 @@ class TestIntelligenceService:
 
         packet = asyncio.run(_run())
         assert packet.keyword == "colchon precio"
+
+    def test_pipeline_uses_intelligence_service(self):
+        """Verify pipeline.py imports IntelligenceService (not just context_builder)."""
+        import inspect
+        import packages.content.pipeline as pipeline_mod
+        src = inspect.getsource(pipeline_mod)
+        assert "IntelligenceService" in src, "pipeline.py must reference IntelligenceService"

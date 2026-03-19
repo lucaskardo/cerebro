@@ -56,17 +56,27 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         except Exception as e:
             logger.warning(f"[{run_id}] Could not load content library: {e}")
 
-        # Focused article context (replaces generic profile dump)
+        # Focused article context — IntelligenceService (pure SQL, <100ms)
+        # Falls back to LLM-based context_builder, then generic profile dump
         try:
-            from packages.intelligence.context_builder import build_article_context
-            client_intelligence = await build_article_context(site_id, keyword, content_library)
+            from packages.intelligence.service import IntelligenceService
+            _packet = await IntelligenceService().for_content(site_id, keyword, content_library)
+            if _packet.facts:
+                client_intelligence = _packet.to_prompt()
+            else:
+                raise ValueError("empty packet — no facts in intelligence graph")
         except Exception as e:
-            logger.warning(f"[{run_id}] context_builder failed, falling back: {e}")
+            logger.warning(f"[{run_id}] IntelligenceService failed, falling back: {e}")
             try:
-                from packages.intelligence import ClientIntelligence
-                client_intelligence = await ClientIntelligence().get_content_context(site_id)
-            except Exception:
-                pass
+                from packages.intelligence.context_builder import build_article_context
+                client_intelligence = await build_article_context(site_id, keyword, content_library)
+            except Exception as e2:
+                logger.warning(f"[{run_id}] context_builder failed, falling back: {e2}")
+                try:
+                    from packages.intelligence import ClientIntelligence
+                    client_intelligence = await ClientIntelligence().get_content_context(site_id)
+                except Exception:
+                    pass
 
         # Performance insights to guide brief
         try:
@@ -164,6 +174,8 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         logger.info(f"[{run_id}] Step 2/4: Writing draft...")
         draft = await _generate_draft(brief, brand, run_id, sources=sources)
         logger.info(f"[{run_id}] Step 2 done in {time.time()-_t:.1f}s")
+        _existing_asset = await db.get_by_id("content_assets", asset_id)
+        _existing_meta = (_existing_asset or {}).get("metadata") or {}
         await db.update("content_assets", asset_id, {
             "title": draft.get("title", keyword),
             "meta_description": draft.get("meta_description", ""),
@@ -172,7 +184,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
             "faq_section": draft.get("faq_section", []),
             "data_claims": draft.get("data_claims", []),
             "partner_mentions": draft.get("partner_mentions", []),
-            "metadata": {**(await db.get_by_id("content_assets", asset_id) or {}).get("metadata") or {}, "sources_used": draft.get("sources_used", [])},
+            "metadata": {**_existing_meta, "sources_used": draft.get("sources_used", [])},
         })
 
         # STEP 2.5: Inject internal links into draft body_md
