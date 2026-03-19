@@ -207,7 +207,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
-from apps.api.app.routers import system, content, leads, strategy, personas, attribution, execution, loop, intelligence
+from apps.api.app.routers import system, content, leads, strategy, personas, attribution, execution, loop, intelligence, intelligence_v2
 from apps.api.app.routers import conversation, briefing
 
 app.include_router(system.router)
@@ -219,6 +219,7 @@ app.include_router(attribution.router)
 app.include_router(execution.router)
 app.include_router(loop.router)
 app.include_router(intelligence.router)
+app.include_router(intelligence_v2.router)  # Structured intelligence layer v2
 app.include_router(conversation.router)
 app.include_router(briefing.router)
 
