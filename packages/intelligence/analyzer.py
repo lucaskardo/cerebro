@@ -25,6 +25,9 @@ ENTITY_SCHEMAS = {
     "competitor": ["positioning", "weakness", "price_range"],
     "segment": ["pain_point", "desire", "size_estimate"],
     "pain_point": ["description", "frequency", "severity"],
+    "brand": ["positioning", "weakness", "price_range", "distribution"],
+    "store": ["location", "brands_carried", "foot_traffic"],
+    "objection": ["description", "frequency", "response"],
 }
 
 

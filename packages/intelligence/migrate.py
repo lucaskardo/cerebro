@@ -99,6 +99,8 @@ async def _upsert_policy(site_id: str, entity_type: str) -> None:
         "segment":     {"min_observations": 10, "observation_ttl_days": 90},
         "pain_point":  {"min_observations": 5, "observation_ttl_days": 120},
         "objection":   {"min_observations": 3, "observation_ttl_days": 120},
+        "brand":       {"min_observations": 5, "observation_ttl_days": 60},
+        "store":       {"min_observations": 3, "observation_ttl_days": 90},
     }.get(entity_type, {})
     await db.insert("discovery_policies", {
         "site_id": site_id,
