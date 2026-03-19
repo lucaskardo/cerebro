@@ -75,16 +75,22 @@ async def list_content(status: Optional[str] = None, limit: int = 50,
 
 @router.get("/api/content/by-slug/{slug}")
 async def get_content_by_slug(slug: str):
-    results = await db.query("content_assets", params={
-        "select": "*", "slug": f"eq.{slug}", "status": "eq.approved"
-    })
-    if not results:
+    try:
         results = await db.query("content_assets", params={
-            "select": "*", "slug": f"eq.{slug}", "status": "in.(review,approved)"
+            "select": "*", "slug": f"eq.{slug}", "status": "eq.approved"
         })
-    if not results:
+        if not results:
+            results = await db.query("content_assets", params={
+                "select": "*", "slug": f"eq.{slug}", "status": "in.(review,approved)"
+            })
+        if not results:
+            raise HTTPException(404, "Article not found")
+        return results[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_content_by_slug error for slug={slug}: {e}")
         raise HTTPException(404, "Article not found")
-    return results[0]
 
 
 @router.get("/api/content/{aid}")

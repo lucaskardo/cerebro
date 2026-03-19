@@ -452,12 +452,16 @@ export default function QuizPage() {
 
     setIsSubmitting(true);
     try {
+      const quizPayload: Record<string, string> = {};
+      QUESTIONS.forEach((q, i) => {
+        if (answers[i]) quizPayload[q.text] = answers[i];
+      });
       await captureLead({
         email: email.trim(),
         nombre: name.trim() || undefined,
         cta_variant: "quiz-results",
         origen_url: typeof window !== "undefined" ? window.location.href : undefined,
-        metadata: { quiz_responses: answers },
+        quiz_responses: quizPayload,
       });
       setLeadCaptured(true);
     } catch {

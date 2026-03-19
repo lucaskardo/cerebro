@@ -45,6 +45,14 @@ export interface Lead {
   intent_score: number;
   tema_interes: string | null;
   utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  cta_variant: string | null;
+  asset_id: string | null;
+  origen_url: string | null;
+  quiz_responses: Record<string, string> | null;
+  current_status: string | null;
   created_at: string;
 }
 
@@ -356,6 +364,7 @@ export const api = {
   sitemap: () => fetchAPI<Array<{ slug: string; updated_at: string }>>("/api/sitemap"),
   leads: (siteId?: string) =>
     fetchAPI<Lead[]>(`/api/leads${siteId ? `?site_id=${siteId}` : ""}`),
+  leadDetail: (id: string) => fetchAPI<Lead>(`/api/leads/${id}`),
   alerts: () => fetchAPI<Alert[]>("/api/alerts"),
   goals: (siteId?: string) =>
     fetchAPI<Goal[]>(`/api/goals${siteId ? `?site_id=${siteId}` : ""}`),

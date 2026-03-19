@@ -54,6 +54,7 @@ export interface LeadData {
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;
+  quiz_responses?: Record<string, string>;
   metadata?: Record<string, unknown>;
 }
 
