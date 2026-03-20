@@ -257,8 +257,6 @@ def validate_fact(fact: dict) -> Optional[str]:
         return "value too long"
     if not fact.get("fact_key"):
         return "missing fact_key"
-    if not fact.get("evidence_quote"):
-        return "missing evidence_quote"
     return None
 
 
@@ -410,9 +408,10 @@ async def store_fact_with_gates(
     category = raw_cat if raw_cat in VALID_CATEGORIES else CATEGORY_MAP.get(raw_cat, "other")
 
     # Gate 3
+    evidence_penalty = 1.0 if fact.get("evidence_quote") else 0.7
     composite = compute_composite_score(
         fact.get("confidence", 0.5), source_trust,
-        fact.get("country_confirmed", False), fact.get("recency_year"))
+        fact.get("country_confirmed", False), fact.get("recency_year")) * evidence_penalty
 
     if composite < QUARANTINE_THRESHOLD:
         return {"stored": False, "discarded": True, "reason": f"low_score: {composite:.3f}"}
