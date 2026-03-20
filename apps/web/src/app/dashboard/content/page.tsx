@@ -300,7 +300,7 @@ function ContentPageContent() {
       {scoreDetail && <ScoreDetail item={scoreDetail} onClose={() => setScoreDetail(null)} />}
       {previewId && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closePreview}>
-          <div style={{ background: "var(--dash-card)", borderRadius: "12px", width: "min(960px, 95vw)", maxHeight: "90vh", overflowY: "auto", border: "1px solid var(--dash-border)" }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: "var(--dash-card, #1a1a2e)", borderRadius: "12px", width: "min(960px, 95vw)", maxHeight: "90vh", overflowY: "auto", border: "1px solid var(--dash-border)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
 
             {/* Header */}
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--dash-border)", display: "flex", justifyContent: "space-between" }}>
