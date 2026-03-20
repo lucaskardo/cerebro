@@ -340,6 +340,7 @@ function ContentPageContent() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+      <style>{`.title-preview-btn:hover { text-decoration: underline; color: var(--dash-accent) !important; } .title-preview-btn:hover::after { content: " 👁"; font-size: 0.75rem; }`}</style>
       {scoreDetail && <ScoreDetail item={scoreDetail} onClose={() => setScoreDetail(null)} />}
       {previewId && (
         <ArticlePreview
@@ -484,12 +485,13 @@ function ContentPageContent() {
                     <tr key={item.id}>
                       <td style={{ maxWidth: "280px", minWidth: 0 }}>
                         <button
+                          className="title-preview-btn"
                           onClick={() => setPreviewId(item.id)}
                           style={{
                             display: "block", overflow: "hidden", textOverflow: "ellipsis",
                             whiteSpace: "nowrap", color: "var(--dash-text)", fontWeight: 500,
                             background: "none", border: "none", cursor: "pointer", padding: 0,
-                            textAlign: "left", width: "100%", fontSize: "inherit",
+                            textAlign: "left", width: "100%", fontSize: "inherit", textDecoration: "none",
                           }}
                           title={`Click para previsualizar: ${item.title}`}
                         >
