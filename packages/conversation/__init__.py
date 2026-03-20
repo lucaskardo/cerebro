@@ -4,6 +4,7 @@ Two-phase: tools executed synchronously, then final text streamed word-by-word v
 """
 import asyncio
 import json
+import re
 import httpx
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator, Optional
@@ -21,13 +22,41 @@ class ChatEngine:
 
     async def build_system_prompt(self, site_id: str) -> str:
         """Build a system prompt that makes Claude 'someone who already knows this business'."""
+        # Build context from intelligence layer (replaces legacy client_profiles)
         try:
-            profiles = await db.query("client_profiles", params={
-                "select": "*", "site_id": f"eq.{site_id}", "limit": "1"
-            })
-            profile = profiles[0] if profiles else {}
+            site_data = await db.get_by_id("domain_sites", site_id)
+            brand_name = (site_data or {}).get("brand_name", "Unknown")
+            brand_persona = (site_data or {}).get("brand_persona", "Business analyst")
+            brand_tone = (site_data or {}).get("brand_tone", "professional, helpful")
         except Exception:
-            profile = {}
+            brand_name, brand_persona, brand_tone = "Unknown", "Business analyst", "professional, helpful"
+
+        try:
+            facts = await db.query("intelligence_facts", params={
+                "select": "category,fact_key,value_text,value_number",
+                "site_id": f"eq.{site_id}",
+                "quarantined": "eq.false",
+                "order": "utility_score.desc",
+                "limit": "20",
+            })
+            entities = await db.query("intelligence_entities", params={
+                "select": "name,entity_type",
+                "site_id": f"eq.{site_id}",
+                "status": "eq.active",
+                "limit": "30",
+            })
+            competitors = [e["name"] for e in (entities or []) if e.get("entity_type") in ("competitor", "brand")]
+            products = [e["name"] for e in (entities or []) if e.get("entity_type") == "product"]
+            segments = [e["name"] for e in (entities or []) if e.get("entity_type") == "segment"]
+            pain_points = [e["name"] for e in (entities or []) if e.get("entity_type") == "pain_point"]
+            by_cat = {}
+            for f in (facts or []):
+                cat = f.get("category", "other")
+                val = f.get("value_text") or str(f.get("value_number", ""))
+                if val and cat not in by_cat:
+                    by_cat[cat] = val
+        except Exception:
+            competitors, products, segments, pain_points, by_cat = [], [], [], [], {}
 
         # Recent metrics
         week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
@@ -35,13 +64,12 @@ class ChatEngine:
             leads_week    = await db.query("leads",          params={"select": "id", "site_id": f"eq.{site_id}", "created_at": f"gte.{week_ago}"})
             articles      = await db.query("content_assets", params={"select": "id,title", "site_id": f"eq.{site_id}", "status": "eq.approved"})
             experiments   = await db.query("experiments",    params={"select": "id,hypothesis", "site_id": f"eq.{site_id}", "status": "eq.running"})
-            knowledge     = await db.query("knowledge_entries", params={"select": "insight,category", "site_id": f"eq.{site_id}", "order": "created_at.desc", "limit": "5"})
         except Exception:
-            leads_week = articles = experiments = knowledge = []
+            leads_week = articles = experiments = []
 
         # Find top article by lead count
         top_article = ""
-        for a in articles[:8]:
+        for a in (articles or [])[:8]:
             try:
                 al = await db.query("leads", params={"select": "id", "asset_id": f"eq.{a['id']}", "limit": "1"})
                 if al:
@@ -50,36 +78,24 @@ class ChatEngine:
             except Exception:
                 pass
 
-        company         = profile.get("company_name", "este negocio")
-        country         = profile.get("country", "Panamá")
-        industry        = profile.get("industry", "")
-        value_prop      = profile.get("value_proposition", "No configurado aún")
-        segments        = profile.get("target_segments", [])
-        competitors     = profile.get("competitors", [])
-        differentiators = profile.get("key_differentiators", [])
-
-        def fmt_list(items, key=None, n=4):
+        def fmt_list(items, n=4):
             if not items:
                 return "No definidos"
-            if key:
-                return "\n".join(f"  • {i.get(key, '')}" for i in items[:n] if i.get(key))
             return "\n".join(f"  • {i}" for i in items[:n])
 
-        segments_str      = ", ".join(s.get("name", "") for s in segments[:3]) or "No definidos"
-        competitors_str   = fmt_list(competitors, "name")
-        diff_str          = fmt_list(differentiators)
-        knowledge_str     = "\n".join(
-            f"  • [{k.get('category','')}] {k.get('insight','')}" for k in knowledge
-        ) if knowledge else "  Sin entradas aún"
+        competitors_str = fmt_list(competitors)
+        segments_str    = ", ".join(segments[:3]) or "No definidos"
+        diff_val        = by_cat.get("differentiator", by_cat.get("positioning", ""))
+        diff_str        = f"  • {diff_val}" if diff_val else "No definidos"
 
-        return f"""Eres CEREBRO, el Sistema Operativo de Crecimiento para {company}.
+        return f"""Eres CEREBRO, el Sistema Operativo de Crecimiento para {brand_name}.
 Ya conoces este negocio profundamente. Aquí está todo lo que sabes:
 
 SITE_ID: {site_id}
 (Usa este ID exactamente en TODOS los tool calls que requieran site_id.)
 
-EMPRESA: {company} — {country}{f", {industry}" if industry else ""}
-PROPUESTA DE VALOR: {value_prop}
+EMPRESA: {brand_name} — Panamá
+PROPUESTA DE VALOR: {brand_persona}
 
 DIFERENCIADORES CLAVE:
 {diff_str}
@@ -95,12 +111,9 @@ ESTADO ACTUAL:
   • Experimentos activos: {len(experiments)}
   • Artículo principal: {top_article or "Sin datos aún"}
 
-CONOCIMIENTO RECIENTE DEL NEGOCIO:
-{knowledge_str}
-
 INSTRUCCIONES DE COMPORTAMIENTO:
 - Hablas como socio de negocio — directo, con datos, accionable.
-- Nunca das consejos genéricos. Todo es específico para {company}.
+- Nunca das consejos genéricos. Todo es específico para {brand_name}.
 - Cuando el usuario pide que hagas algo, usas las herramientas disponibles para ejecutarlo.
 - Cuando hace una pregunta, consultas los datos y respondes con especificidad.
 - Respondes en el mismo idioma que el usuario.
@@ -325,53 +338,33 @@ INSTRUCCIONES DE COMPORTAMIENTO:
 
             elif tool_name == "update_intelligence":
                 sid = tool_input.get("site_id", "")
-                logger.info(f"update_intelligence: site_id={sid!r} field={tool_input.get('field')!r} action={tool_input.get('action')!r} item_name={tool_input.get('item_name')!r}")
-                profiles = await db.query("client_profiles", params={"select": "*", "site_id": f"eq.{sid}", "limit": "1"})
-                logger.info(f"update_intelligence: profiles found={len(profiles)}")
-                if not profiles:
-                    return json.dumps({"status": "error", "detail": f"Profile not found for site_id={sid}"})
-                profile = profiles[0]
-                field   = tool_input["field"]
-                action  = tool_input.get("action", "replace")
+                field = tool_input.get("field", "")
+                action = tool_input.get("action", "add")
+                item_name = tool_input.get("item_name", "")
 
-                def _item_matches(item, search: str) -> bool:
-                    """Case-insensitive match against any string value in the item."""
-                    s = search.strip().lower()
-                    if not s:
-                        return False
-                    if isinstance(item, dict):
-                        return any(str(v).lower() == s for v in item.values() if isinstance(v, str))
-                    return str(item).lower() == s
+                field_to_entity = {"competitors": "competitor", "pain_points": "pain_point", "objections": "objection", "segments": "segment"}
+                field_to_fact = {"content_angles": "content", "buying_triggers": "trigger", "market_trends": "market", "key_differentiators": "differentiator", "value_proposition": "positioning"}
 
-                if action == "replace":
-                    update_value = tool_input["value"]
-                elif action == "array_add":
-                    current = list(profile.get(field) or [])
-                    new_item = tool_input.get("value") or {"name": tool_input.get("item_name", "")}
-                    # Derive search name to deduplicate
-                    search = tool_input.get("item_name") or (new_item.get("name") if isinstance(new_item, dict) else str(new_item))
-                    current = [i for i in current if not _item_matches(i, search)]
-                    current.append(new_item)
-                    update_value = current
-                elif action == "array_remove":
-                    current = list(profile.get(field) or [])
-                    # Accept name from item_name OR value (Claude may use either)
-                    search = tool_input.get("item_name") or tool_input.get("value") or ""
-                    if isinstance(search, dict):
-                        search = search.get("name", "")
-                    before = len(current)
-                    update_value = [i for i in current if not _item_matches(i, str(search))]
-                    removed = before - len(update_value)
-                    if removed == 0:
-                        return json.dumps({"status": "not_found", "field": field, "searched": search,
-                                           "available": [i.get("name", i) if isinstance(i, dict) else i for i in current]})
+                if field in field_to_entity and action in ("add", "array_add") and item_name:
+                    et = field_to_entity[field]
+                    slug = re.sub(r'[^a-z0-9-]', '', item_name.lower().strip().replace(" ", "-"))[:50]
+                    try:
+                        existing = await db.query("intelligence_entities", params={"select": "id", "site_id": f"eq.{sid}", "entity_type": f"eq.{et}", "slug": f"eq.{slug}", "limit": "1"})
+                        if not existing:
+                            await db.insert("intelligence_entities", {"site_id": sid, "entity_type": et, "name": item_name.strip(), "slug": slug, "status": "active"})
+                        return json.dumps({"status": "updated", "field": field, "action": action})
+                    except Exception as e:
+                        return json.dumps({"status": "error", "detail": str(e)})
+                elif field in field_to_fact and item_name:
+                    cat = field_to_fact[field]
+                    fk = f"{cat}.manual.{re.sub(r'[^a-z0-9-]', '', item_name.lower().replace(' ', '-'))[:30]}"
+                    try:
+                        await db.rpc("upsert_intelligence_fact", {"p_site_id": sid, "p_entity_id": None, "p_fact_key": fk, "p_category": cat, "p_value_text": item_name.strip(), "p_value_number": None, "p_value_json": None, "p_confidence": 0.8, "p_tags": ["manual", cat], "p_source": "manual", "p_quarantined": False, "p_source_ref": "chat-tool"})
+                        return json.dumps({"status": "updated", "field": field, "action": action})
+                    except Exception as e:
+                        return json.dumps({"status": "error", "detail": str(e)})
                 else:
-                    return json.dumps({"status": "error", "detail": f"Unknown action: {action}"})
-
-                logger.info(f"update_intelligence: writing field={field!r} len={len(update_value) if isinstance(update_value, list) else 'scalar'} to profile_id={profile['id']}")
-                result = await db.update("client_profiles", profile["id"], {field: update_value})
-                logger.info(f"update_intelligence: write result={bool(result)}")
-                return json.dumps({"status": "updated", "field": field, "action": action})
+                    return json.dumps({"status": "error", "detail": f"Unknown field: {field}"})
 
             elif tool_name == "run_cycle":
                 api_url = "http://localhost:8000"

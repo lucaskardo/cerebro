@@ -432,6 +432,18 @@ async def store_fact_with_gates(
                 await db.update("intelligence_facts", eid, {"quarantined": True})
             except Exception:
                 pass
+        # Create change detection alert
+        try:
+            await db.insert("operator_alerts", {
+                "site_id": site_id,
+                "alert_type": "fact_changed",
+                "severity": "medium",
+                "title": f"Contradicting data: {fact_key}",
+                "body": f"New value from {source_url[:80]} contradicts existing fact. Reason: {contradiction.get('reason', '')}. Both quarantined.",
+                "metadata": {"fact_key": fact_key, "source_url": source_url[:200]},
+            })
+        except Exception:
+            pass  # Alert is non-critical
     elif contradiction["action"] == "corroborate":
         should_quarantine = False
 
@@ -467,6 +479,22 @@ async def store_fact_with_gates(
             "p_quarantined": should_quarantine,
             "p_source_ref": source_url[:200],
         })
+
+        # Update evidence columns (not in original RPC)
+        try:
+            stored_facts = await db.query("intelligence_facts", params={
+                "select": "id", "site_id": f"eq.{site_id}",
+                "fact_key": f"eq.{fact_key}", "limit": "1",
+            })
+            if stored_facts:
+                updates = {"evidence_type": "web_research"}
+                eq = fact.get("evidence_quote", "")
+                if eq:
+                    updates["evidence_quote"] = str(eq)[:500]
+                await db.update("intelligence_facts", stored_facts[0]["id"], updates)
+        except Exception:
+            pass  # Non-critical
+
         status = "quarantined" if should_quarantine else "trusted"
         logger.info(f"Stored [{status}]: {fact_key} (score={composite:.3f})")
         return {"stored": True, "quarantined": should_quarantine,

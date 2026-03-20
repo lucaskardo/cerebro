@@ -152,7 +152,7 @@ class IntelligenceService:
     ) -> ContentPacket:
         """
         Build content context for a specific keyword.
-        Queries intelligence_facts, product entities, and client_profiles in parallel.
+        Queries intelligence_facts, product entities, and domain_sites in parallel.
         Scores facts by keyword relevance + utility_score.
         Saves a context receipt asynchronously (fire-and-forget).
         Returns ContentPacket — call .to_prompt() for the {client_intelligence} string.
@@ -175,14 +175,10 @@ class IntelligenceService:
             "entity_type": "eq.product",
             "limit": "10",
         })
-        profile_q = db.query("client_profiles", params={
-            "select": "company_name,value_proposition,country,brand_voice_notes",
-            "site_id": f"eq.{site_id}",
-            "limit": "1",
-        })
+        site_q = db.get_by_id("domain_sites", site_id)
 
-        facts, products, profiles = await asyncio.gather(
-            facts_q, products_q, profile_q,
+        facts, products, site_data = await asyncio.gather(
+            facts_q, products_q, site_q,
             return_exceptions=True,
         )
 
@@ -193,11 +189,17 @@ class IntelligenceService:
         if isinstance(products, Exception):
             logger.warning(f"for_content: products query failed: {products}")
             products = []
-        if isinstance(profiles, Exception):
-            logger.warning(f"for_content: profile query failed: {profiles}")
-            profiles = []
+        if isinstance(site_data, Exception):
+            logger.warning(f"for_content: site query failed: {site_data}")
+            site_data = {}
 
-        profile = profiles[0] if profiles else {}
+        site_data = site_data or {}
+        profile = {
+            "company_name": site_data.get("brand_name", ""),
+            "country": site_data.get("country", ""),
+            "value_proposition": site_data.get("brand_persona", ""),
+            "brand_voice_notes": site_data.get("brand_tone", "Directa, honesta, útil"),
+        }
 
         # Score facts by keyword relevance (token overlap) + utility_score
         keyword_tokens = set(keyword.lower().split())
@@ -235,18 +237,16 @@ class IntelligenceService:
     ) -> WhatsAppPacket:
         """Context for WhatsApp response generation. Stub — minimal profile query."""
         try:
-            profiles = await db.query("client_profiles", params={
-                "select": "company_name,value_proposition",
-                "site_id": f"eq.{site_id}",
-                "limit": "1",
-            })
-            profile = profiles[0] if profiles else {}
+            site = await db.get_by_id("domain_sites", site_id)
+            company_name = (site or {}).get("brand_name", "Unknown")
+            value_proposition = (site or {}).get("brand_persona", "")
         except Exception:
-            profile = {}
+            company_name, value_proposition = "Unknown", ""
+        # TODO: attribution trace when packet is implemented
         return WhatsAppPacket(
             site_id=site_id,
-            company=profile.get("company_name", ""),
-            value_prop=profile.get("value_proposition", ""),
+            company=company_name,
+            value_prop=value_proposition,
         )
 
     async def for_quiz(
@@ -256,52 +256,44 @@ class IntelligenceService:
     ) -> QuizPacket:
         """Context for quiz scoring/routing. Stub — minimal profile query."""
         try:
-            profiles = await db.query("client_profiles", params={
-                "select": "company_name,value_proposition",
-                "site_id": f"eq.{site_id}",
-                "limit": "1",
-            })
-            profile = profiles[0] if profiles else {}
+            site = await db.get_by_id("domain_sites", site_id)
+            company_name = (site or {}).get("brand_name", "Unknown")
+            value_proposition = (site or {}).get("brand_persona", "")
         except Exception:
-            profile = {}
+            company_name, value_proposition = "Unknown", ""
+        # TODO: attribution trace when packet is implemented
         return QuizPacket(
             site_id=site_id,
-            company=profile.get("company_name", ""),
-            value_prop=profile.get("value_proposition", ""),
+            company=company_name,
+            value_prop=value_proposition,
         )
 
     async def for_dashboard(self, site_id: str) -> DashboardPacket:
         """Context for dashboard summary. Stub — minimal profile query."""
         try:
-            profiles = await db.query("client_profiles", params={
-                "select": "company_name,value_proposition",
-                "site_id": f"eq.{site_id}",
-                "limit": "1",
-            })
-            profile = profiles[0] if profiles else {}
+            site = await db.get_by_id("domain_sites", site_id)
+            company_name = (site or {}).get("brand_name", "Unknown")
+            value_proposition = (site or {}).get("brand_persona", "")
         except Exception:
-            profile = {}
+            company_name, value_proposition = "Unknown", ""
         return DashboardPacket(
             site_id=site_id,
-            company=profile.get("company_name", ""),
-            value_prop=profile.get("value_proposition", ""),
+            company=company_name,
+            value_prop=value_proposition,
         )
 
     async def for_briefing(self, site_id: str) -> BriefingPacket:
         """Context for editorial briefing. Stub — minimal profile query."""
         try:
-            profiles = await db.query("client_profiles", params={
-                "select": "company_name,value_proposition",
-                "site_id": f"eq.{site_id}",
-                "limit": "1",
-            })
-            profile = profiles[0] if profiles else {}
+            site = await db.get_by_id("domain_sites", site_id)
+            company_name = (site or {}).get("brand_name", "Unknown")
+            value_proposition = (site or {}).get("brand_persona", "")
         except Exception:
-            profile = {}
+            company_name, value_proposition = "Unknown", ""
         return BriefingPacket(
             site_id=site_id,
-            company=profile.get("company_name", ""),
-            value_prop=profile.get("value_proposition", ""),
+            company=company_name,
+            value_prop=value_proposition,
         )
 
     async def _save_receipt(

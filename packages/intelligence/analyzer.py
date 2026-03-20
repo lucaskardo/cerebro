@@ -27,17 +27,6 @@ PHASE5_TIMEOUT = 600  # phase 5 research: up to 10 entities × 60s each
 MAX_RESEARCH_TASKS_PER_WEEK = 10
 UTILITY_BOOST_ON_DECAY = 0.05  # small decay per week
 
-# Entity schemas: minimum required facts per entity type
-ENTITY_SCHEMAS = {
-    "product": ["value_prop", "target_segment", "price_range"],
-    "competitor": ["positioning", "weakness", "price_range"],
-    "segment": ["pain_point", "desire", "size_estimate"],
-    "pain_point": ["description", "frequency", "severity"],
-    "brand": ["positioning", "weakness", "price_range", "distribution"],
-    "store": ["location", "brands_carried", "foot_traffic"],
-    "objection": ["description", "frequency", "response"],
-}
-
 
 
 class IntelligenceAnalyzer:
@@ -270,6 +259,19 @@ class IntelligenceAnalyzer:
                         "p_source_ref": source_ref,
                     },
                 )
+
+                # Set evidence_type based on source
+                if obs.get("source_type") == "pipeline":
+                    try:
+                        stored = await db.query("intelligence_facts", params={
+                            "select": "id", "site_id": f"eq.{site_id}",
+                            "fact_key": f"eq.{fact_key}", "limit": "1",
+                        })
+                        if stored:
+                            await db.update("intelligence_facts", stored[0]["id"], {"evidence_type": "own_data"})
+                    except Exception:
+                        pass
+
                 processed_count += 1
             except Exception as e:
                 logger.warning(f"Failed to upsert fact from observation {obs.get('id')}: {e}")
@@ -550,51 +552,109 @@ class IntelligenceAnalyzer:
 
     async def _phase4_detect_knowledge_gaps(self, site_id: str) -> dict:
         """
-        Use check_entity_completeness RPC.
-        Compare against ENTITY_SCHEMAS.
-        Log gaps (don't create tasks here — research engine handles in phase 5).
-        Returns {"gaps_found": N, "gap_details": [...]}
+        Compare each entity's facts against required slots from DB.
+        Returns gaps sorted by priority_score (highest first).
         """
+        from datetime import datetime, timezone
+
         gaps_found = 0
         gap_details: list = []
 
+        # Fetch slots for this site
         try:
-            completeness_rows = await db.rpc(
-                "check_entity_completeness", {"p_site_id": site_id}
-            )
+            slots = await db.query("intelligence_entity_slots", params={
+                "select": "entity_type,slot_name,priority,stale_after_days",
+                "site_id": f"eq.{site_id}",
+                "order": "priority.desc",
+            })
         except Exception as e:
-            logger.warning(f"Phase 4: check_entity_completeness failed for {site_id}: {e}")
+            logger.warning(f"Phase 4: Could not load slots: {e}")
             return {"gaps_found": 0, "gap_details": []}
 
-        if not completeness_rows:
+        if not slots:
+            logger.info("Phase 4: No slots defined — skipping gap detection")
             return {"gaps_found": 0, "gap_details": []}
 
-        for row in completeness_rows:
-            entity_type = row.get("entity_type", "")
-            fact_count = row.get("fact_count", 0) or 0
-            categories = row.get("categories") or []
+        # Group slots by entity_type
+        slots_by_type: dict[str, list] = {}
+        for slot in slots:
+            et = slot["entity_type"]
+            if et not in slots_by_type:
+                slots_by_type[et] = []
+            slots_by_type[et].append(slot)
 
-            schema_cats = ENTITY_SCHEMAS.get(entity_type, [])
-            required_count = len(schema_cats) or 3
-            if fact_count < required_count:
-                missing = required_count - fact_count
-                missing_categories = [c for c in schema_cats if c not in categories]
-                gaps_found += 1
-                gap_details.append(
-                    {
-                        "entity_id": row.get("entity_id"),
+        # Fetch active entities
+        try:
+            entities = await db.query("intelligence_entities", params={
+                "select": "id,name,entity_type,slug",
+                "site_id": f"eq.{site_id}",
+                "status": "eq.active",
+            })
+        except Exception:
+            entities = []
+
+        for entity in (entities or []):
+            entity_type = entity.get("entity_type", "")
+            required_slots = slots_by_type.get(entity_type, [])
+            if not required_slots:
+                continue
+
+            # Get this entity's facts
+            try:
+                entity_facts = await db.query("intelligence_facts", params={
+                    "select": "fact_key,category,updated_at",
+                    "site_id": f"eq.{site_id}",
+                    "entity_id": f"eq.{entity['id']}",
+                })
+            except Exception:
+                entity_facts = []
+
+            # Build set of filled slot names from fact_keys
+            filled_slots = set()
+            fact_dates: dict[str, str] = {}
+            for f in (entity_facts or []):
+                fk = f.get("fact_key", "")
+                parts = fk.split(".")
+                if len(parts) >= 3:
+                    filled_slots.add(parts[-1])  # last part is usually the slot
+                filled_slots.add(f.get("category", ""))
+                # Track newest date per slot-like key
+                for part in parts:
+                    if f.get("updated_at"):
+                        if part not in fact_dates or f["updated_at"] > fact_dates.get(part, ""):
+                            fact_dates[part] = f["updated_at"]
+
+            for slot in required_slots:
+                slot_name = slot["slot_name"]
+                is_missing = slot_name not in filled_slots
+
+                # Check staleness
+                is_stale = False
+                if not is_missing and slot_name in fact_dates:
+                    stale_days = slot.get("stale_after_days", 90)
+                    try:
+                        newest = fact_dates[slot_name]
+                        fact_age = (datetime.now(timezone.utc) - datetime.fromisoformat(newest.replace("Z", "+00:00"))).days
+                        is_stale = fact_age > stale_days
+                    except Exception:
+                        pass
+
+                if is_missing or is_stale:
+                    priority_score = slot.get("priority", 5) * (1.5 if is_missing else 1.0)
+                    gap_details.append({
+                        "entity_id": entity["id"],
+                        "entity_name": entity.get("name", ""),
                         "entity_type": entity_type,
-                        "name": row.get("name", ""),
-                        "missing_count": missing,
-                        "existing_categories": categories,
-                        "missing_categories": missing_categories,
-                    }
-                )
-                logger.info(
-                    f"Phase 4: gap detected — {row.get('name', '')} ({entity_type}) "
-                    f"has {fact_count}/{required_count} facts"
-                )
+                        "missing_slot": slot_name,
+                        "missing_categories": [slot_name],
+                        "priority_score": round(priority_score, 1),
+                        "is_stale": is_stale,
+                    })
+                    gaps_found += 1
 
+        # Sort by priority (highest first)
+        gap_details.sort(key=lambda g: g.get("priority_score", 0), reverse=True)
+        logger.info(f"Phase 4: {gaps_found} gaps found across {len(entities or [])} entities")
         return {"gaps_found": gaps_found, "gap_details": gap_details}
 
     # ------------------------------------------------------------------
