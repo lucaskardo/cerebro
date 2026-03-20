@@ -423,16 +423,34 @@ def _build_queries(
     """Build targeted search queries based on what facts are missing."""
     queries = []
 
-    # Category-specific query templates
+    # Map schema field names → fact category query templates
+    # missing_categories come from ENTITY_SCHEMAS (e.g. "value_prop", "price_range")
     templates = {
+        # Direct fact categories
         "pricing": f"{entity_name} {country} precios colchones 2025",
-        "positioning": f"{entity_name} {country} colchones opiniones reseñas",
-        "audience": f"{entity_name} {country} para quien es ideal",
+        "price_range": f"{entity_name} {country} precios colchones 2025",
+        "positioning": f"{entity_name} {country} colchones opiniones reseñas marca",
+        "audience": f"{entity_name} {country} para quien es ideal segmento",
         "competitor": f"{entity_name} vs competidores {country} colchones",
         "product": f"{entity_name} modelos lineas productos {country}",
         "market": f"mercado colchones {country} tendencias 2025",
         "differentiator": f"{entity_name} {country} que lo diferencia ventajas",
         "objection": f"{entity_name} {country} quejas problemas opiniones",
+        # Schema field names
+        "value_prop": f"{entity_name} {country} beneficios ventajas propuesta de valor",
+        "target_segment": f"{entity_name} {country} para quien es ideal clientes",
+        "weakness": f"{entity_name} {country} desventajas problemas criticas",
+        "distribution": f"{entity_name} {country} donde comprar tiendas distribuidores",
+        "pain_point": f"{entity_name} problemas dolor {country} colchones",
+        "desire": f"{entity_name} deseos necesidades {country} colchones",
+        "size_estimate": f"tamaño mercado {entity_name} {country} consumidores",
+        "description": f"{entity_name} {country} que es como funciona",
+        "frequency": f"{entity_name} frecuencia {country} colchones clientes",
+        "severity": f"{entity_name} gravedad impacto {country} colchones",
+        "response": f"como responder {entity_name} objecion colchones {country}",
+        "location": f"{entity_name} {country} direccion ubicacion tienda",
+        "brands_carried": f"{entity_name} {country} marcas colchones disponibles",
+        "foot_traffic": f"{entity_name} {country} visitas clientes tienda",
     }
 
     # General entity query always included
@@ -440,6 +458,8 @@ def _build_queries(
         queries.append(f"{entity_name} colchones {country} tiendas precios")
     elif entity_type == "store":
         queries.append(f"{entity_name} {country} marcas colchones disponibles")
+    elif entity_type == "competitor":
+        queries.append(f"{entity_name} colchones {country} precios opiniones")
     else:
         queries.append(f"{entity_name} {country}")
 
