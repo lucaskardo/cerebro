@@ -3,8 +3,8 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import type { ContentAsset, Site } from "@/lib/api";
-import { api, reviewContent } from "@/lib/api";
+import type { ContentAsset, Site, ContentRecommendation } from "@/lib/api";
+import { api, reviewContent, getContentRecommendations, generateContent } from "@/lib/api";
 import ExportCSV from "@/components/dashboard/ExportCSV";
 
 const STATUS_TABS = ["all", "draft", "review", "approved", "generating", "error"] as const;
@@ -293,6 +293,11 @@ function ContentPageContent() {
   const [actioning, setActioning] = useState<Record<string, boolean>>({});
   const [scoreDetail, setScoreDetail] = useState<ContentAsset | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [recommendations, setRecommendations] = useState<ContentRecommendation[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const [generateKeyword, setGenerateKeyword] = useState("");
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -335,6 +340,49 @@ function ContentPageContent() {
     } finally {
       setActioning((prev) => ({ ...prev, [item.id]: false }));
     }
+  }
+
+  async function openGenerate() {
+    setShowGenerate(true);
+    setGenerateKeyword("");
+    setLoadingRecs(true);
+    try {
+      const recs = await getContentRecommendations(siteId);
+      setRecommendations(recs);
+    } catch {
+      setRecommendations([]);
+    }
+    setLoadingRecs(false);
+  }
+
+  async function handleGenerate() {
+    if (!generateKeyword.trim()) return;
+    setGenerating(true);
+    try {
+      const siteData = sites.find(s => s.id === siteId);
+      const missionId = siteData?.mission_id || "";
+      if (!missionId) {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://web-production-c6ed5.up.railway.app"}/api/sites`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("cerebro_token") || ""}` }
+        });
+        const allSites = await res.json();
+        const site = (Array.isArray(allSites) ? allSites : []).find((s: any) => s.id === siteId);
+        const mid = site?.mission_id || "";
+        if (!mid) throw new Error("No mission_id found for this site");
+        await generateContent({ keyword: generateKeyword.trim(), site_id: siteId, mission_id: mid });
+      } else {
+        await generateContent({ keyword: generateKeyword.trim(), site_id: siteId, mission_id: missionId });
+      }
+      addToast(`Generating article: "${generateKeyword.trim()}"`, true);
+      setShowGenerate(false);
+      setGenerateKeyword("");
+      setTimeout(() => {
+        api.content(undefined, siteId || undefined).then(setItems).catch(() => {});
+      }, 2000);
+    } catch (e: any) {
+      addToast(`Error: ${e.message}`, false);
+    }
+    setGenerating(false);
   }
 
   const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.brand_name || s.domain]));
@@ -411,6 +459,18 @@ function ContentPageContent() {
         </div>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <ExportCSV data={filtered as unknown as Record<string, unknown>[]} filename="content.csv" label="Export CSV" />
+          <button
+            onClick={openGenerate}
+            disabled={!siteId}
+            style={{
+              background: "var(--dash-accent)", color: "#000", border: "none",
+              padding: "10px 20px", borderRadius: "8px", cursor: "pointer",
+              fontWeight: 600, fontSize: "0.9rem",
+              opacity: siteId ? 1 : 0.4,
+            }}
+          >
+            + Generar Artículo
+          </button>
         </div>
       </div>
 
@@ -601,6 +661,102 @@ function ContentPageContent() {
           </div>
         )}
       </div>
+
+      {showGenerate && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 300,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setShowGenerate(false)}>
+          <div style={{
+            background: "var(--dash-card)", borderRadius: "12px", padding: "24px",
+            width: "min(600px, 90vw)", maxHeight: "80vh", overflowY: "auto",
+            border: "1px solid var(--dash-border)",
+          }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: "1.2rem" }}>Generar Artículo Nuevo</h2>
+            <p style={{ color: "var(--dash-text-dim)", fontSize: "0.85rem", margin: "0 0 16px" }}>
+              CEREBRO recomienda temas basados en inteligencia del mercado. Elige uno o escribe tu propio keyword.
+            </p>
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "0.8rem", color: "var(--dash-text-dim)", display: "block", marginBottom: "4px" }}>
+                Keyword / Tema del artículo
+              </label>
+              <input
+                type="text"
+                value={generateKeyword}
+                onChange={e => setGenerateKeyword(e.target.value)}
+                placeholder="ej: Mejor colchón para dolor de espalda en Panamá"
+                style={{
+                  width: "100%", padding: "10px 12px", borderRadius: "8px",
+                  border: "1px solid var(--dash-border)", background: "var(--dash-bg)",
+                  color: "var(--dash-text)", fontSize: "0.9rem", boxSizing: "border-box",
+                }}
+                onKeyDown={e => e.key === "Enter" && handleGenerate()}
+              />
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "0.8rem", color: "var(--dash-text-dim)", display: "block", marginBottom: "8px" }}>
+                Recomendaciones de CEREBRO
+              </label>
+              {loadingRecs ? (
+                <p style={{ color: "var(--dash-text-dim)", fontSize: "0.85rem" }}>Analizando inteligencia...</p>
+              ) : recommendations.length === 0 ? (
+                <p style={{ color: "var(--dash-text-dim)", fontSize: "0.85rem" }}>No hay recomendaciones disponibles. Escribe tu propio keyword arriba.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "250px", overflowY: "auto" }}>
+                  {recommendations.map((rec, i) => (
+                    <div
+                      key={i}
+                      onClick={() => setGenerateKeyword(rec.keyword)}
+                      style={{
+                        padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
+                        border: generateKeyword === rec.keyword ? "1px solid var(--dash-accent)" : "1px solid var(--dash-border)",
+                        background: generateKeyword === rec.keyword ? "rgba(0,255,136,0.05)" : "transparent",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <div style={{ fontSize: "0.85rem", fontWeight: 500, marginBottom: "2px" }}>
+                        {rec.keyword}
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>
+                        {rec.reason} · <span style={{
+                          color: rec.source === "insight" ? "var(--dash-accent)" : rec.source === "entity" ? "#60a5fa" : "#a78bfa",
+                        }}>{rec.source}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowGenerate(false)}
+                style={{
+                  padding: "10px 20px", borderRadius: "8px", cursor: "pointer",
+                  border: "1px solid var(--dash-border)", background: "transparent",
+                  color: "var(--dash-text)", fontSize: "0.85rem",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={!generateKeyword.trim() || generating}
+                style={{
+                  padding: "10px 20px", borderRadius: "8px", cursor: "pointer",
+                  border: "none", background: "var(--dash-accent)", color: "#000",
+                  fontWeight: 600, fontSize: "0.85rem",
+                  opacity: !generateKeyword.trim() || generating ? 0.4 : 1,
+                }}
+              >
+                {generating ? "Generando..." : "Generar Artículo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

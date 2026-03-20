@@ -104,6 +104,14 @@ export interface Site {
   author_bio: string | null;
   status: string;
   site_type: string;
+  mission_id?: string;
+}
+
+export interface ContentRecommendation {
+  keyword: string;
+  reason: string;
+  priority: number;
+  source: "insight" | "entity" | "fact";
 }
 
 export interface Goal {
@@ -520,7 +528,28 @@ export const api = {
     if (params?.limit) q.set("limit", String(params.limit));
     return fetchAPI<SocialQueueItem[]>(`/api/social/queue${q.toString() ? `?${q}` : ""}`);
   },
+  recommendations: (siteId: string) => getContentRecommendations(siteId),
 };
+
+export async function getContentRecommendations(siteId: string): Promise<ContentRecommendation[]> {
+  const res = await fetch(`${API_URL}/api/content/recommend/${siteId}`, { headers: authHeaders() });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function generateContent(data: {
+  keyword: string;
+  site_id: string;
+  mission_id: string;
+}): Promise<{ asset_id: string; status: string; keyword: string }> {
+  const res = await fetch(`${API_URL}/api/content/generate`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
+  return res.json();
+}
 
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };

@@ -87,6 +87,126 @@ async def _generate_social_drafts_bg(asset_id: str, site_id: str):
         logger.error(f"Social draft generation failed for {asset_id}: {e}")
 
 
+@router.get("/api/content/recommend/{site_id}", dependencies=[Depends(require_auth)])
+async def recommend_content(site_id: str, limit: int = 10):
+    """
+    Recommend article topics based on intelligence gaps, existing content, and insights.
+    Returns a list of {keyword, reason, priority, source} suggestions.
+    """
+    recommendations = []
+
+    # 1. Get existing article keywords to avoid duplicates
+    try:
+        existing = await db.query("content_assets", params={
+            "select": "keyword",
+            "site_id": f"eq.{site_id}",
+            "status": "neq.error",
+        })
+        existing_keywords = {a.get("keyword", "").lower().strip() for a in (existing or [])}
+    except Exception:
+        existing_keywords = set()
+
+    # 2. Get insights that suggest content opportunities
+    try:
+        insights = await db.query("intelligence_insights", params={
+            "select": "id,title,body,insight_type,impact_score,recommended_action",
+            "site_id": f"eq.{site_id}",
+            "status": "eq.active",
+            "order": "impact_score.desc",
+            "limit": "10",
+        })
+        for ins in (insights or []):
+            if ins.get("insight_type") in ("content_gap", "opportunity", "recommendation"):
+                action = ins.get("recommended_action") or ins.get("title", "")
+                if action and action.lower() not in existing_keywords:
+                    recommendations.append({
+                        "keyword": action[:100],
+                        "reason": ins.get("body", "")[:200],
+                        "priority": ins.get("impact_score", 5),
+                        "source": "insight",
+                    })
+    except Exception:
+        pass
+
+    # 3. Get entities with empty content-related slots
+    try:
+        entities = await db.query("intelligence_entities", params={
+            "select": "name,entity_type,slug",
+            "site_id": f"eq.{site_id}",
+            "status": "eq.active",
+            "limit": "30",
+        })
+        for ent in (entities or []):
+            name = ent.get("name", "")
+            etype = ent.get("entity_type", "")
+
+            suggestions = []
+            if etype in ("competitor", "brand"):
+                suggestions = [
+                    f"{name} vs NauralSleep comparativa colchones Panamá",
+                    f"Opiniones {name} colchones Panamá",
+                ]
+            elif etype == "segment":
+                suggestions = [
+                    f"Mejor colchón para {name.lower()} en Panamá",
+                ]
+            elif etype == "pain_point":
+                suggestions = [
+                    f"Cómo solucionar {name.lower()} al dormir",
+                ]
+            elif etype == "objection":
+                suggestions = [
+                    f"{name} — lo que debes saber antes de comprar colchón",
+                ]
+
+            for kw in suggestions:
+                if kw.lower() not in existing_keywords:
+                    recommendations.append({
+                        "keyword": kw,
+                        "reason": f"Basado en {etype}: {name}",
+                        "priority": 7 if etype in ("competitor", "brand") else 6,
+                        "source": "entity",
+                    })
+    except Exception:
+        pass
+
+    # 4. Get high-utility facts that could inspire content
+    try:
+        facts = await db.query("intelligence_facts", params={
+            "select": "category,fact_key,value_text",
+            "site_id": f"eq.{site_id}",
+            "quarantined": "eq.false",
+            "category": "in.(trigger,objection,differentiator)",
+            "order": "utility_score.desc",
+            "limit": "10",
+        })
+        for fact in (facts or []):
+            val = fact.get("value_text", "")
+            cat = fact.get("category", "")
+            if val and len(val) > 10:
+                kw = f"{val[:60]} — guía completa Panamá"
+                if kw.lower() not in existing_keywords:
+                    recommendations.append({
+                        "keyword": kw,
+                        "reason": f"Fact de alta utilidad ({cat})",
+                        "priority": 5,
+                        "source": "fact",
+                    })
+    except Exception:
+        pass
+
+    # Sort by priority and deduplicate
+    seen = set()
+    unique = []
+    for r in sorted(recommendations, key=lambda x: x.get("priority", 0), reverse=True):
+        key = r["keyword"].lower()[:40]
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+
+    return unique[:limit]
+
+
 @router.get("/api/content")
 async def list_content(status: Optional[str] = None, limit: int = 50,
                        site_id: Optional[str] = None):
