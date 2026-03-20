@@ -135,3 +135,10 @@ body_html generated from body_md via Python markdown lib (not LLM)
 13. Column names in schema are the ONLY source of truth — PostgREST silently ignores wrong column names
 14. Slugs must use hyphens (-) not underscores (_) — all existing entities use hyphens
 15. consumer_type has CHECK constraint — only 5 valid values (see contract above)
+
+## Deploy Rules (CRITICAL)
+16. NEVER run `npx vercel` or `vercel --prod` from CLI — it can disconnect Git integration
+17. Deploy happens automatically on `git push origin main` — just push and wait
+18. Dashboard (web-ten-woad-99.vercel.app) = Vercel project "web", root: apps/web
+19. Public site (colchonespanama.com) = Vercel project "cerebro-web", root: apps/sites/colchones-panama
+20. If Vercel shows "Connect Git Repository" on any project, STOP and tell the operator — deploy is broken
