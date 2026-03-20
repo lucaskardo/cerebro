@@ -272,6 +272,156 @@ async def get_content_by_slug(slug: str):
         raise HTTPException(404, "Article not found")
 
 
+FEEDBACK_CATEGORIES = [
+    "accuracy", "market_specificity", "tone", "structure",
+    "seo", "product_error", "competitor_error",
+    "missing_info", "cta", "style", "other",
+]
+
+
+@router.post("/api/content/{asset_id}/feedback", dependencies=[Depends(require_auth)])
+async def submit_feedback(asset_id: str, request: Request, bg: BackgroundTasks):
+    """Submit structured feedback. Optionally creates a content rule."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    asset = await db.get_by_id("content_assets", asset_id)
+    if not asset:
+        raise HTTPException(404, "Asset not found")
+
+    decision = body.get("decision", "reject")
+    primary_reason = body.get("primary_reason", "other")
+    severity = body.get("severity", "medium")
+    free_text = body.get("free_text", "")
+    make_rule = body.get("make_rule", False)
+    rule_scope = body.get("rule_scope", "keyword")
+    site_id = asset.get("site_id", "")
+
+    # Save feedback event
+    event = await db.insert("feedback_events", {
+        "site_id": site_id,
+        "asset_id": asset_id,
+        "decision": decision,
+        "primary_reason": primary_reason,
+        "severity": severity,
+        "free_text": free_text or None,
+        "make_rule": make_rule,
+        "rule_scope": rule_scope,
+        "quality_score_at_review": asset.get("quality_score"),
+    })
+
+    # Save to asset metadata for backward compat
+    metadata = asset.get("metadata") or {}
+    fh = metadata.get("feedback_history", [])
+    fh.append({
+        "decision": decision, "reason": primary_reason,
+        "severity": severity, "text": free_text,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "score": asset.get("quality_score"),
+    })
+    metadata["feedback_history"] = fh
+
+    rule_id = None
+
+    # Create rule if requested
+    if make_rule and free_text and free_text.strip():
+        scope_ref = asset.get("keyword", "")[:100] if rule_scope == "keyword" else None
+        try:
+            rule = await db.insert("content_rules", {
+                "site_id": site_id,
+                "rule_text": free_text.strip()[:200],
+                "category": primary_reason if primary_reason in FEEDBACK_CATEGORIES else "other",
+                "scope": rule_scope,
+                "scope_ref": scope_ref,
+                "source": "human_feedback",
+                "created_from": event["id"] if event else None,
+                "status": "testing",
+                "strength": 0.5,
+            })
+            rule_id = rule["id"] if rule else None
+            if rule_id and event:
+                await db.update("feedback_events", event["id"], {"rule_created_id": rule_id})
+        except Exception as e:
+            logger.warning(f"Failed to create rule: {e}")
+
+    # Update article based on decision
+    if decision in ("approve", "approve_minor"):
+        await db.update("content_assets", asset_id, {"status": "approved", "metadata": metadata})
+        bg.add_task(_boost_active_rules, metadata.get("active_rule_ids", []))
+    elif decision == "regenerate":
+        metadata["regenerate_feedback"] = free_text
+        await db.update("content_assets", asset_id, {
+            "status": "generating", "metadata": metadata,
+            "body_md": None, "body_html": None,
+            "quality_score": None, "score_humanity": None,
+            "score_specificity": None, "score_structure": None,
+            "score_seo": None, "score_readability": None,
+            "score_feedback": None, "error_message": None,
+        })
+        bg.add_task(_run_pipeline_bg, asset.get("keyword", ""), asset.get("mission_id", ""), asset_id, site_id)
+        bg.add_task(_weaken_matching_rules, metadata.get("active_rule_ids", []), primary_reason)
+    elif decision == "reject":
+        await db.update("content_assets", asset_id, {"status": "draft", "metadata": metadata})
+        bg.add_task(_weaken_matching_rules, metadata.get("active_rule_ids", []), primary_reason)
+
+    return {"ok": True, "decision": decision, "rule_created": rule_id is not None, "rule_id": str(rule_id) if rule_id else None}
+
+
+async def _boost_active_rules(rule_ids: list):
+    """Boost strength of rules that contributed to an approved article."""
+    for rid in (rule_ids or []):
+        try:
+            r = await db.get_by_id("content_rules", rid)
+            if not r:
+                continue
+            new_helped = (r.get("times_helped", 0) or 0) + 1
+            new_applied = (r.get("times_applied", 0) or 0) + 1
+            new_strength = min(1.0, (r.get("strength", 0.5) + 0.05))
+            updates = {"strength": new_strength, "times_helped": new_helped, "times_applied": new_applied}
+            if new_helped >= 3 and r.get("status") == "testing":
+                updates["status"] = "proven"
+            if new_helped >= 6 and r.get("status") == "proven":
+                updates["status"] = "trusted"
+            await db.update("content_rules", rid, updates)
+        except Exception:
+            pass
+
+
+async def _weaken_matching_rules(rule_ids: list, failed_reason: str = ""):
+    """Weaken rules whose category matches the failure reason."""
+    for rid in (rule_ids or []):
+        try:
+            r = await db.get_by_id("content_rules", rid)
+            if not r:
+                continue
+            if r.get("category") == failed_reason or not failed_reason:
+                new_strength = max(0.0, (r.get("strength", 0.5) - 0.1))
+                new_failed = (r.get("times_failed", 0) or 0) + 1
+                new_applied = (r.get("times_applied", 0) or 0) + 1
+                updates = {"strength": new_strength, "times_failed": new_failed, "times_applied": new_applied}
+                if new_strength < 0.2 and new_applied >= 5:
+                    updates["active"] = False
+                    updates["status"] = "inactive"
+                await db.update("content_rules", rid, updates)
+        except Exception:
+            pass
+
+
+@router.get("/api/content/rules/{site_id}", dependencies=[Depends(require_auth)])
+async def list_content_rules(site_id: str):
+    """List all content rules for a site."""
+    try:
+        rules = await db.query("content_rules", params={
+            "select": "*", "site_id": f"eq.{site_id}",
+            "order": "strength.desc", "limit": "50",
+        })
+        return rules or []
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/api/content/{aid}")
 async def get_content(aid: str):
     a = await db.get_by_id("content_assets", aid)
