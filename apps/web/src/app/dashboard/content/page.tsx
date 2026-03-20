@@ -205,7 +205,7 @@ function ArticlePreview({
             ) : article?.body_html ? (
               <>
                 <div className="article-preview-content" dangerouslySetInnerHTML={{ __html: article.body_html }} />
-                {article.faq_section?.length > 0 && (
+                {(article.faq_section?.length ?? 0) > 0 && (
                   <div style={{ marginTop: "2rem", borderTop: "1px solid var(--dash-border)", paddingTop: "1.5rem" }}>
                     <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "1rem" }}>Preguntas Frecuentes</h2>
                     {article.faq_section.map((faq: any, i: number) => (
