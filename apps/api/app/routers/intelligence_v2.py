@@ -180,6 +180,44 @@ async def list_research_runs(site_id: str, limit: int = Query(20, le=100)):
         return []
 
 
+@router.get("/facts/{site_id}/quarantined", dependencies=[Depends(require_auth)])
+async def list_quarantined_facts(site_id: str, limit: int = Query(50, le=200)):
+    """List quarantined facts for human review."""
+    try:
+        facts = await db.query("intelligence_facts", params={
+            "select": "id,fact_key,category,value_text,value_number,confidence,tags,source,created_at",
+            "site_id": f"eq.{site_id}",
+            "quarantined": "eq.true",
+            "confidence": "gt.0",
+            "order": "created_at.desc",
+            "limit": str(limit),
+        })
+        return facts or []
+    except Exception as e:
+        logger.error(f"quarantined facts {site_id}: {e}", exc_info=True)
+        return {"error": str(e)}
+
+
+@router.post("/facts/{fact_id}/approve", dependencies=[Depends(require_auth)])
+async def approve_fact(fact_id: str):
+    """Approve a quarantined fact — moves it to trusted."""
+    try:
+        result = await db.update("intelligence_facts", fact_id, {"quarantined": False})
+        return result or {"ok": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/facts/{fact_id}/reject", dependencies=[Depends(require_auth)])
+async def reject_fact(fact_id: str):
+    """Reject a quarantined fact — keeps it but sets confidence to 0."""
+    try:
+        await db.update("intelligence_facts", fact_id, {"quarantined": True, "confidence": 0.0})
+        return {"ok": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.post("/analyze/{site_id}", dependencies=[Depends(require_auth)])
 async def run_analysis_cycle(site_id: str):
     """Manually trigger the weekly intelligence analysis cycle."""
