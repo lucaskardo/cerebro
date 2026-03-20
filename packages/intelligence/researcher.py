@@ -34,13 +34,19 @@ BLOCKED_DOMAINS = {"facebook.com", "instagram.com", "twitter.com", "x.com",
 
 async def search_web(query: str, max_results: int = MAX_SEARCH_RESULTS) -> list[dict]:
     """Search via DuckDuckGo. Returns [{title, url, snippet}].
-    Runs in thread pool because duckduckgo-search is sync.
+    Runs in thread pool because ddgs is sync.
+    Uses Panama/Spanish region to get relevant results.
     """
     def _sync_search():
         try:
-            from duckduckgo_search import DDGS
-            with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=max_results))
+            from ddgs import DDGS
+            with DDGS() as d:
+                results = list(d.text(
+                    query,
+                    max_results=max_results,
+                    region="pa-es",  # Panama Spanish
+                    safesearch="off",
+                ))
             return [
                 {
                     "title": r.get("title", ""),
