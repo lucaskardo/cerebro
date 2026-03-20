@@ -23,6 +23,7 @@ def _slugify(text: str) -> str:
     return _re.sub(r'-+', '-', text)[:50]
 
 PHASE_TIMEOUT = 120  # seconds per phase
+PHASE5_TIMEOUT = 600  # phase 5 research: up to 10 entities × 60s each
 MAX_RESEARCH_TASKS_PER_WEEK = 10
 UTILITY_BOOST_ON_DECAY = 0.05  # small decay per week
 
@@ -105,7 +106,7 @@ class IntelligenceAnalyzer:
         try:
             summary["phases"]["phase5"] = await asyncio.wait_for(
                 self._phase5_execute_research(site_id, gaps),
-                timeout=PHASE_TIMEOUT,
+                timeout=PHASE5_TIMEOUT,
             )
         except Exception as e:
             logger.warning(f"Phase 5 failed for {site_id}: {e}")
@@ -950,7 +951,7 @@ class IntelligenceAnalyzer:
         try:
             phase5_result = await asyncio.wait_for(
                 self._phase5_execute_research(site_id, gaps),
-                timeout=PHASE_TIMEOUT,
+                timeout=PHASE5_TIMEOUT,
             )
             summary["phase5"] = phase5_result
         except Exception as e:
