@@ -42,6 +42,7 @@ export interface ContentAsset {
   body_html?: string | null;
   meta_description?: string | null;
   faq_section?: Array<{ question: string; answer: string }> | null;
+  error_message?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -111,6 +112,7 @@ export interface Site {
 
 export interface ContentRecommendation {
   keyword: string;
+  topic?: string;
   reason: string;
   priority: number;
   source: "insight" | "entity" | "fact";
@@ -539,8 +541,18 @@ export async function getContentRecommendations(siteId: string): Promise<Content
   return res.json();
 }
 
+export async function deleteContent(id: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${API_URL}/api/content/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+  return res.json();
+}
+
 export async function generateContent(data: {
   keyword: string;
+  topic?: string;
   site_id: string;
   mission_id: string;
 }): Promise<{ asset_id: string; status: string; keyword: string }> {

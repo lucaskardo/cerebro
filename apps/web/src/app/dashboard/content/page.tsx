@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ContentAsset, Site, ContentRecommendation } from "@/lib/api";
-import { api, reviewContent, getContentRecommendations, generateContent } from "@/lib/api";
+import { api, reviewContent, getContentRecommendations, generateContent, deleteContent } from "@/lib/api";
 import ExportCSV from "@/components/dashboard/ExportCSV";
 
 const STATUS_TABS = ["all", "draft", "review", "approved", "generating", "error"] as const;
@@ -297,6 +297,7 @@ function ContentPageContent() {
   const [recommendations, setRecommendations] = useState<ContentRecommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [generateKeyword, setGenerateKeyword] = useState("");
+  const [generateTopic, setGenerateTopic] = useState("");
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
@@ -345,6 +346,7 @@ function ContentPageContent() {
   async function openGenerate() {
     setShowGenerate(true);
     setGenerateKeyword("");
+    setGenerateTopic("");
     setLoadingRecs(true);
     try {
       const recs = await getContentRecommendations(siteId);
@@ -369,13 +371,14 @@ function ContentPageContent() {
         const site = (Array.isArray(allSites) ? allSites : []).find((s: any) => s.id === siteId);
         const mid = site?.mission_id || "";
         if (!mid) throw new Error("No mission_id found for this site");
-        await generateContent({ keyword: generateKeyword.trim(), site_id: siteId, mission_id: mid });
+        await generateContent({ keyword: generateKeyword.trim(), topic: generateTopic.trim() || undefined, site_id: siteId, mission_id: mid });
       } else {
-        await generateContent({ keyword: generateKeyword.trim(), site_id: siteId, mission_id: missionId });
+        await generateContent({ keyword: generateKeyword.trim(), topic: generateTopic.trim() || undefined, site_id: siteId, mission_id: missionId });
       }
       addToast(`Generating article: "${generateKeyword.trim()}"`, true);
       setShowGenerate(false);
       setGenerateKeyword("");
+      setGenerateTopic("");
       setTimeout(() => {
         api.content(undefined, siteId || undefined).then(setItems).catch(() => {});
       }, 2000);
@@ -577,6 +580,11 @@ function ContentPageContent() {
                         >
                           {title}
                         </button>
+                        {item.status === "error" && item.error_message && (
+                          <div style={{ fontSize: "0.7rem", color: "#ef4444", marginTop: "2px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {item.error_message}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <span className="badge badge-gray" style={{ fontSize: "0.6875rem" }}>{brandName}</span>
@@ -651,6 +659,59 @@ function ContentPageContent() {
                               Ver →
                             </Link>
                           )}
+                          {item.status === "error" && (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  if (!confirm("¿Regenerar este artículo?")) return;
+                                  setActioning(a => ({...a, [item.id]: true}));
+                                  try {
+                                    const siteData = sites.find(s => s.id === siteId);
+                                    const mid = siteData?.mission_id || "";
+                                    await generateContent({ keyword: item.keyword, site_id: siteId, mission_id: mid });
+                                    addToast(`Regenerando: "${item.keyword}"`, true);
+                                    try { await deleteContent(item.id); } catch {}
+                                    setTimeout(() => api.content(undefined, siteId || undefined).then(setItems).catch(() => {}), 2000);
+                                  } catch (e: any) {
+                                    addToast(`Error: ${e.message}`, false);
+                                  }
+                                  setActioning(a => ({...a, [item.id]: false}));
+                                }}
+                                disabled={isLoading}
+                                style={{
+                                  padding: "4px 10px", borderRadius: "6px", cursor: "pointer",
+                                  border: "1px solid var(--dash-accent)", background: "transparent",
+                                  color: "var(--dash-accent)", fontSize: "0.75rem", fontWeight: 500,
+                                  opacity: isLoading ? 0.6 : 1,
+                                }}
+                              >
+                                Regenerar
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (!confirm("¿Borrar este artículo?")) return;
+                                  setActioning(a => ({...a, [item.id]: true}));
+                                  try {
+                                    await deleteContent(item.id);
+                                    addToast("Artículo eliminado", true);
+                                    setItems(items.filter(i => i.id !== item.id));
+                                  } catch (e: any) {
+                                    addToast(`Error: ${e.message}`, false);
+                                  }
+                                  setActioning(a => ({...a, [item.id]: false}));
+                                }}
+                                disabled={isLoading}
+                                style={{
+                                  padding: "4px 10px", borderRadius: "6px", cursor: "pointer",
+                                  border: "1px solid #ef4444", background: "transparent",
+                                  color: "#ef4444", fontSize: "0.75rem", fontWeight: 500,
+                                  opacity: isLoading ? 0.6 : 1,
+                                }}
+                              >
+                                Borrar
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -677,21 +738,38 @@ function ContentPageContent() {
               CEREBRO recomienda temas basados en inteligencia del mercado. Elige uno o escribe tu propio keyword.
             </p>
 
-            <div style={{ marginBottom: "16px" }}>
+            <div style={{ marginBottom: "12px" }}>
               <label style={{ fontSize: "0.8rem", color: "var(--dash-text-dim)", display: "block", marginBottom: "4px" }}>
-                Keyword / Tema del artículo
+                Keyword SEO (corto, para posicionar en Google)
               </label>
               <input
                 type="text"
                 value={generateKeyword}
                 onChange={e => setGenerateKeyword(e.target.value)}
-                placeholder="ej: Mejor colchón para dolor de espalda en Panamá"
+                placeholder="ej: colchones para embarazadas panama"
                 style={{
                   width: "100%", padding: "10px 12px", borderRadius: "8px",
                   border: "1px solid var(--dash-border)", background: "var(--dash-bg)",
                   color: "var(--dash-text)", fontSize: "0.9rem", boxSizing: "border-box",
                 }}
                 onKeyDown={e => e.key === "Enter" && handleGenerate()}
+              />
+            </div>
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ fontSize: "0.8rem", color: "var(--dash-text-dim)", display: "block", marginBottom: "4px" }}>
+                Tema / Descripción (qué debe cubrir el artículo)
+              </label>
+              <textarea
+                value={generateTopic}
+                onChange={e => setGenerateTopic(e.target.value)}
+                placeholder="ej: Guía completa para embarazadas sobre qué colchón elegir, firmeza ideal, materiales seguros, posiciones para dormir"
+                rows={3}
+                style={{
+                  width: "100%", padding: "10px 12px", borderRadius: "8px",
+                  border: "1px solid var(--dash-border)", background: "var(--dash-bg)",
+                  color: "var(--dash-text)", fontSize: "0.9rem", boxSizing: "border-box",
+                  resize: "vertical", fontFamily: "inherit",
+                }}
               />
             </div>
 
@@ -708,7 +786,7 @@ function ContentPageContent() {
                   {recommendations.map((rec, i) => (
                     <div
                       key={i}
-                      onClick={() => setGenerateKeyword(rec.keyword)}
+                      onClick={() => { setGenerateKeyword(rec.keyword); setGenerateTopic(rec.topic || ""); }}
                       style={{
                         padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
                         border: generateKeyword === rec.keyword ? "1px solid var(--dash-accent)" : "1px solid var(--dash-border)",
@@ -719,6 +797,11 @@ function ContentPageContent() {
                       <div style={{ fontSize: "0.85rem", fontWeight: 500, marginBottom: "2px" }}>
                         {rec.keyword}
                       </div>
+                      {rec.topic && (
+                        <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", marginBottom: "2px", fontStyle: "italic" }}>
+                          {rec.topic}
+                        </div>
+                      )}
                       <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)" }}>
                         {rec.reason} · <span style={{
                           color: rec.source === "insight" ? "var(--dash-accent)" : rec.source === "entity" ? "#60a5fa" : "#a78bfa",

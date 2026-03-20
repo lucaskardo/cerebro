@@ -32,16 +32,21 @@ async def generate_content(req: ContentGenerate, bg: BackgroundTasks,
     if not asset:
         raise HTTPException(500, "Failed to create content asset")
 
-    bg.add_task(_run_pipeline_bg, req.keyword, req.mission_id, asset["id"], req.site_id)
+    bg.add_task(_run_pipeline_bg, req.keyword, req.mission_id, asset["id"], req.site_id, req.topic)
     await audit(request, "generate_content", "content_assets", asset["id"],
                 {"keyword": req.keyword, "site_id": req.site_id})
     return {"asset_id": asset["id"], "status": "generating", "keyword": req.keyword}
 
 
-async def _run_pipeline_bg(keyword: str, mission_id: str, asset_id: str, site_id: str = None):
+async def _run_pipeline_bg(keyword: str, mission_id: str, asset_id: str, site_id: str = None, topic: str = None):
     import asyncio
     from packages.content.pipeline import run_pipeline
     from packages.core import db
+    if topic:
+        try:
+            await db.update("content_assets", asset_id, {"metadata": {"topic": topic}})
+        except Exception:
+            pass
     try:
         await asyncio.wait_for(
             run_pipeline(keyword, mission_id, asset_id, site_id=site_id),
@@ -120,7 +125,8 @@ async def recommend_content(site_id: str, limit: int = 10):
                 action = ins.get("recommended_action") or ins.get("title", "")
                 if action and action.lower() not in existing_keywords:
                     recommendations.append({
-                        "keyword": action[:100],
+                        "keyword": action[:80],
+                        "topic": (ins.get("body", "") or "")[:200],
                         "reason": ins.get("body", "")[:200],
                         "priority": ins.get("impact_score", 5),
                         "source": "insight",
@@ -143,26 +149,27 @@ async def recommend_content(site_id: str, limit: int = 10):
             suggestions = []
             if etype in ("competitor", "brand"):
                 suggestions = [
-                    f"{name} vs NauralSleep comparativa colchones Panamá",
-                    f"Opiniones {name} colchones Panamá",
+                    {"keyword": f"{name} vs NauralSleep colchones Panama", "topic": f"Artículo comparativo entre {name} y NauralSleep — precios, calidad, garantía, entrega"},
+                    {"keyword": f"opiniones {name} colchones Panama", "topic": f"Reseña completa de {name}: qué dicen los clientes, pros y contras"},
                 ]
             elif etype == "segment":
                 suggestions = [
-                    f"Mejor colchón para {name.lower()} en Panamá",
+                    {"keyword": f"mejor colchon {name.lower()} panama", "topic": f"Guía para {name.lower()}: qué buscar en un colchón, recomendaciones específicas"},
                 ]
             elif etype == "pain_point":
                 suggestions = [
-                    f"Cómo solucionar {name.lower()} al dormir",
+                    {"keyword": f"{name.lower()} colchon solucion", "topic": f"Cómo elegir el colchón correcto para solucionar {name.lower()} — guía práctica"},
                 ]
             elif etype == "objection":
                 suggestions = [
-                    f"{name} — lo que debes saber antes de comprar colchón",
+                    {"keyword": f"comprar colchon {name.lower()[:30]} panama", "topic": f"Respuesta a la objeción '{name}' — datos y comparaciones reales"},
                 ]
 
-            for kw in suggestions:
-                if kw.lower() not in existing_keywords:
+            for suggestion in suggestions:
+                if suggestion["keyword"].lower() not in existing_keywords:
                     recommendations.append({
-                        "keyword": kw,
+                        "keyword": suggestion["keyword"][:80],
+                        "topic": suggestion["topic"][:200],
                         "reason": f"Basado en {etype}: {name}",
                         "priority": 7 if etype in ("competitor", "brand") else 6,
                         "source": "entity",
@@ -184,10 +191,12 @@ async def recommend_content(site_id: str, limit: int = 10):
             val = fact.get("value_text", "")
             cat = fact.get("category", "")
             if val and len(val) > 10:
-                kw = f"{val[:60]} — guía completa Panamá"
+                kw = f"{val[:60]} guia Panama"
+                topic = f"Artículo basado en {cat}: {val[:150]} — guía práctica para compradores en Panamá"
                 if kw.lower() not in existing_keywords:
                     recommendations.append({
-                        "keyword": kw,
+                        "keyword": kw[:80],
+                        "topic": topic[:200],
                         "reason": f"Fact de alta utilidad ({cat})",
                         "priority": 5,
                         "source": "fact",
@@ -207,12 +216,29 @@ async def recommend_content(site_id: str, limit: int = 10):
     return unique[:limit]
 
 
+@router.delete("/api/content/{asset_id}", dependencies=[Depends(require_auth)])
+async def delete_content(asset_id: str):
+    """Delete a content asset (only error or draft status)."""
+    try:
+        asset = await db.get_by_id("content_assets", asset_id)
+        if not asset:
+            raise HTTPException(404, "Asset not found")
+        if asset.get("status") not in ("error", "draft"):
+            raise HTTPException(400, "Can only delete error or draft articles")
+        await db.delete("content_assets", asset_id)
+        return {"ok": True, "deleted": asset_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @router.get("/api/content")
 async def list_content(status: Optional[str] = None, limit: int = 50,
                        site_id: Optional[str] = None):
     try:
         params = {
-            "select": "id,title,slug,keyword,status,site_id,quality_score,humanization_score,score_humanity,score_specificity,score_structure,score_seo,score_readability,score_feedback,created_at,updated_at",
+            "select": "id,title,slug,keyword,status,site_id,quality_score,humanization_score,score_humanity,score_specificity,score_structure,score_seo,score_readability,score_feedback,error_message,created_at,updated_at",
             "order": "created_at.desc",
             "limit": str(limit),
         }
