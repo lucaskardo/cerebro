@@ -238,8 +238,8 @@ function ContentPageContent() {
 
   async function handleFeedback(decision: FeedbackPayload["decision"]) {
     if (!previewArticle) return;
-    if (decision !== "approve" && decision !== "approve_minor" && !feedbackReason) {
-      addToast("Selecciona una razón", false); return;
+    if (decision === "regenerate" && !feedbackReason) {
+      addToast("Selecciona una razón para regenerar", false); return;
     }
     setSubmittingFeedback(true);
     try {
