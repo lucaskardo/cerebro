@@ -202,6 +202,7 @@ async def extract_facts(
             and (f.get("value_text") or f.get("value_number") is not None)
         ]
 
+        logger.info(f"extract_facts: parsed={len(parsed)} filtered={len(facts)} url={url[:60]}")
         return facts, usage
 
     except json.JSONDecodeError as e:
@@ -221,6 +222,20 @@ def _slugify(text: str) -> str:
     return re.sub(r'-+', '-', text)[:50]
 
 
+VALID_CATEGORIES = {
+    "pricing", "positioning", "audience", "competitor", "content",
+    "product", "market", "performance", "objection", "trigger",
+    "differentiator", "other",
+}
+
+CATEGORY_MAP = {
+    "store": "market", "brand": "competitor", "information": "other",
+    "features": "product", "feature": "product", "segment": "audience",
+    "persona": "audience", "pain": "objection", "price": "pricing",
+    "location": "market", "distribution": "market", "weakness": "competitor",
+}
+
+
 async def store_fact(
     site_id: str,
     entity_id: Optional[str],
@@ -229,7 +244,8 @@ async def store_fact(
     research_run_id: Optional[str] = None,
 ) -> bool:
     """Upsert a single extracted fact into intelligence_facts."""
-    category = fact.get("category", "other")
+    raw_category = fact.get("category", "other")
+    category = raw_category if raw_category in VALID_CATEGORIES else CATEGORY_MAP.get(raw_category, "other")
     fact_key = fact.get("fact_key") or f"{category}.research.{_slugify(source_url)[:20]}"
     confidence = fact.get("confidence", 0.5)
 
@@ -244,6 +260,7 @@ async def store_fact(
     else:
         return False
 
+    logger.debug(f"Storing fact: {fact_key} cat={category} text={value_text!r:.40} num={value_number}")
     try:
         await db.rpc("upsert_intelligence_fact", {
             "p_site_id": site_id,
@@ -259,6 +276,7 @@ async def store_fact(
             "p_quarantined": False,
             "p_source_ref": source_url[:200],
         })
+        logger.info(f"Stored fact: {fact_key}")
         return True
     except Exception as e:
         logger.warning(f"Failed to store fact {fact_key}: {e}")
