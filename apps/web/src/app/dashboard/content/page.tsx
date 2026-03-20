@@ -208,7 +208,7 @@ function ArticlePreview({
                 {(article.faq_section?.length ?? 0) > 0 && (
                   <div style={{ marginTop: "2rem", borderTop: "1px solid var(--dash-border)", paddingTop: "1.5rem" }}>
                     <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "1rem" }}>Preguntas Frecuentes</h2>
-                    {article.faq_section.map((faq: any, i: number) => (
+                    {article.faq_section?.map((faq: any, i: number) => (
                       <details key={i} style={{ marginBottom: "0.75rem", padding: "0.75rem 1rem", background: "rgba(255,255,255,0.03)", borderRadius: "8px", border: "1px solid var(--dash-border)" }}>
                         <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.95rem" }}>{faq.question}</summary>
                         <p style={{ marginTop: "0.5rem", fontSize: "0.9rem", lineHeight: 1.7, color: "var(--dash-text-dim)" }}>{faq.answer}</p>
