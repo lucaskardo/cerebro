@@ -40,6 +40,8 @@ export interface ContentAsset {
   score_feedback: string | null;
   site_id: string | null;
   body_html?: string | null;
+  meta_description?: string | null;
+  faq_section?: Array<{ question: string; answer: string }> | null;
   created_at: string;
   updated_at: string;
 }
