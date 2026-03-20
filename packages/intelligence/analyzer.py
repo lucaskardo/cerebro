@@ -4,7 +4,6 @@ Weekly analysis cycle: 8 phases, budget-controlled, 120s timeout each.
 Run once per week (Sundays). Cost target: <$1/month per client.
 """
 import asyncio
-import os
 import re as _re
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -38,10 +37,6 @@ ENTITY_SCHEMAS = {
     "objection": ["description", "frequency", "response"],
 }
 
-
-def web_search_available() -> bool:
-    """Returns True only if SERPAPI_KEY is set in environment."""
-    return bool(os.getenv("SERPAPI_KEY", "").strip())
 
 
 class IntelligenceAnalyzer:
@@ -578,9 +573,11 @@ class IntelligenceAnalyzer:
             fact_count = row.get("fact_count", 0) or 0
             categories = row.get("categories") or []
 
-            required_count = len(ENTITY_SCHEMAS.get(entity_type, [])) or 3
+            schema_cats = ENTITY_SCHEMAS.get(entity_type, [])
+            required_count = len(schema_cats) or 3
             if fact_count < required_count:
                 missing = required_count - fact_count
+                missing_categories = [c for c in schema_cats if c not in categories]
                 gaps_found += 1
                 gap_details.append(
                     {
@@ -589,6 +586,7 @@ class IntelligenceAnalyzer:
                         "name": row.get("name", ""),
                         "missing_count": missing,
                         "existing_categories": categories,
+                        "missing_categories": missing_categories,
                     }
                 )
                 logger.info(
@@ -604,64 +602,51 @@ class IntelligenceAnalyzer:
 
     async def _phase5_execute_research(self, site_id: str, gaps: list) -> dict:
         """
-        Budget-controlled: max MAX_RESEARCH_TASKS_PER_WEEK tasks.
-        Check discovery_policies for budget_per_run_usd.
-        For top-priority gaps (up to limit):
-          - Create a research_run row (status=running)
-          - Use web_search_available() check — if no SERPAPI_KEY, skip search
-          - Create research_finding observations from gap context
-          - Mark research_run completed
-        Returns {"research_tasks_run": N, "skipped": N}
-        NOTE: No actual web search if SERPAPI_KEY missing — create placeholder observations.
+        Research engine: for top-priority gaps, run real web research.
+        Uses DuckDuckGo search + page reading + Haiku extraction.
+        Budget-controlled: max MAX_RESEARCH_TASKS_PER_WEEK entities.
         """
-        research_tasks_run = 0
-        skipped = 0
+        from packages.intelligence.researcher import research_entity, research_market
 
         if not gaps:
-            return {"research_tasks_run": 0, "skipped": 0}
+            return {"research_tasks_run": 0, "skipped": 0, "facts_stored": 0,
+                    "total_cost": 0.0, "total_tokens": 0}
 
-        # Check policy budget
-        try:
-            policies = await db.query(
-                "discovery_policies",
-                params={"select": "research_budget_monthly,research_token_budget_monthly", "site_id": f"eq.{site_id}"},
-            )
-        except Exception:
-            policies = []
+        research_tasks_run = 0
+        skipped = 0
+        total_facts_stored = 0
+        total_cost = 0.0
+        total_tokens = 0
 
-        default_max = MAX_RESEARCH_TASKS_PER_WEEK
+        # Sort gaps: most missing facts first
+        sorted_gaps = sorted(gaps, key=lambda g: -(g.get("missing_count") or 0))
 
-        # Sort gaps: most missing facts first (higher missing_count = higher priority)
-        sorted_gaps = sorted(
-            gaps,
-            key=lambda g: -(g.get("missing_count") or 0),
-        )
-
-        can_search = web_search_available()
         now = datetime.now(timezone.utc).isoformat()
 
         for gap in sorted_gaps:
-            if research_tasks_run >= default_max:
+            if research_tasks_run >= MAX_RESEARCH_TASKS_PER_WEEK:
                 skipped += 1
                 continue
 
             entity_id = gap.get("entity_id")
             entity_name = gap.get("name", "unknown")
             entity_type = gap.get("entity_type", "other")
-            missing_count = gap.get("missing_count", 0) or 0
+            missing_categories = gap.get("missing_categories") or []
+
+            if not missing_categories:
+                # If no specific categories, use general list
+                missing_categories = ["pricing", "positioning", "product"]
 
             # Create research_run row
             run_row = None
             try:
-                run_row = await db.insert(
-                    "research_runs",
-                    {
-                        "site_id": site_id,
-                        "task_type": f"gap_research_{entity_type}",
-                        "trigger": "threshold",
-                        "status": "running",
-                    },
-                )
+                run_row = await db.insert("research_runs", {
+                    "site_id": site_id,
+                    "task_type": f"gap_research_{entity_type}",
+                    "trigger": "threshold",
+                    "status": "running",
+                    "started_at": now,
+                })
             except Exception as e:
                 logger.warning(f"Phase 5: failed to create research_run for {entity_name}: {e}")
                 skipped += 1
@@ -669,65 +654,74 @@ class IntelligenceAnalyzer:
 
             research_run_id = run_row.get("id") if run_row else None
 
-            # Create one placeholder observation per missing fact slot
-            observations_created = 0
-            for i in range(missing_count):
-                try:
-                    if can_search:
-                        obs_value = {
-                            "query": f"{entity_name} facts",
-                            "status": "search_queued",
-                            "entity_name": entity_name,
-                            "slot": i,
-                        }
-                        source_type = "ai_research"
-                    else:
-                        obs_value = {
-                            "gap_entity": entity_name,
-                            "entity_type": entity_type,
-                            "missing_slot": i,
-                            "status": "placeholder",
-                            "note": "No SERPAPI_KEY — manual research needed",
-                        }
-                        source_type = "manual"
+            # Run REAL web research
+            try:
+                stats = await asyncio.wait_for(
+                    research_entity(
+                        site_id=site_id,
+                        entity_id=entity_id,
+                        entity_name=entity_name,
+                        entity_type=entity_type,
+                        missing_categories=missing_categories,
+                    ),
+                    timeout=60,  # 60s max per entity
+                )
 
-                    await db.insert(
-                        "intelligence_observations",
-                        {
-                            "site_id": site_id,
-                            "entity_id": entity_id,
-                            "observation_type": "research_finding",
-                            "source_type": source_type,
-                            "source_ref": f"research_run:{research_run_id}",
-                            "raw_value": obs_value,
-                            "normalized_tags": [entity_type, "gap_fill"],
-                            "processed": False,
-                            "processing_run_id": None,
-                        },
-                    )
-                    observations_created += 1
-                except Exception as e:
-                    logger.warning(
-                        f"Phase 5: failed to create observation for {entity_name} slot {i}: {e}"
-                    )
+                total_facts_stored += stats.get("facts_stored", 0)
+                total_cost += stats.get("cost", 0.0)
+                total_tokens += stats.get("tokens_used", 0)
 
-            # Mark research_run completed
+                logger.info(
+                    f"Phase 5: researched {entity_name} — "
+                    f"{stats.get('pages_read', 0)} pages, "
+                    f"{stats.get('facts_stored', 0)} facts stored, "
+                    f"${stats.get('cost', 0.0):.4f}"
+                )
+
+            except asyncio.TimeoutError:
+                logger.warning(f"Phase 5: research timeout for {entity_name}")
+                stats = {"error": "timeout"}
+            except Exception as e:
+                logger.warning(f"Phase 5: research failed for {entity_name}: {e}")
+                stats = {"error": str(e)}
+
+            # Update research_run with results
             if research_run_id:
                 try:
-                    await db.update(
-                        "research_runs",
-                        research_run_id,
-                        {
-                            "status": "completed",
-                            "completed_at": datetime.now(timezone.utc).isoformat(),
-                        },
-                    )
+                    await db.update("research_runs", research_run_id, {
+                        "status": "completed" if "error" not in stats else "failed",
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "tokens_used": stats.get("tokens_used", 0),
+                        "search_calls": stats.get("queries", 0),
+                        "cost_usd": stats.get("cost", 0.0),
+                        "error_message": stats.get("error"),
+                    })
                 except Exception as e:
-                    logger.warning(f"Phase 5: failed to mark research_run completed: {e}")
+                    logger.warning(f"Phase 5: failed to update research_run: {e}")
 
             research_tasks_run += 1
 
-        return {"research_tasks_run": research_tasks_run, "skipped": skipped}
+        # Also run one general market research if we haven't used all budget
+        if research_tasks_run < MAX_RESEARCH_TASKS_PER_WEEK:
+            try:
+                market_stats = await asyncio.wait_for(
+                    research_market(site_id=site_id),
+                    timeout=90,
+                )
+                total_facts_stored += market_stats.get("facts_stored", 0)
+                total_cost += market_stats.get("cost", 0.0)
+                total_tokens += market_stats.get("tokens_used", 0)
+                logger.info(f"Phase 5: market research — {market_stats.get('facts_stored', 0)} facts")
+            except Exception as e:
+                logger.warning(f"Phase 5: market research failed: {e}")
+
+        return {
+            "research_tasks_run": research_tasks_run,
+            "skipped": skipped,
+            "facts_stored": total_facts_stored,
+            "total_cost": total_cost,
+            "total_tokens": total_tokens,
+        }
 
     # ------------------------------------------------------------------
     # Phase 6 — Generate insights (ONE Haiku call total)
