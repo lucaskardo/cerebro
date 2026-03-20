@@ -153,25 +153,29 @@ function ArticlePreview({
   return (
     <>
       <style>{`
-        .article-preview-content h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; }
-        .article-preview-content h2 { font-size: 1.25rem; font-weight: 700; margin: 1.25rem 0 0.625rem; }
-        .article-preview-content h3 { font-size: 1.125rem; font-weight: 600; margin: 1rem 0 0.5rem; }
-        .article-preview-content p { margin: 0 0 0.875rem; }
-        .article-preview-content ul, .article-preview-content ol { margin: 0 0 1rem; padding-left: 1.5rem; }
-        .article-preview-content li { margin-bottom: 0.375rem; }
-        .article-preview-content a { color: var(--dash-accent); }
-        .article-preview-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.875rem; }
-        .article-preview-content th, .article-preview-content td { padding: 0.5rem 0.75rem; border: 1px solid var(--dash-border); }
-        .article-preview-content th { background: var(--dash-bg); font-weight: 600; }
-        .article-preview-content blockquote { border-left: 3px solid var(--dash-accent); padding-left: 1rem; margin: 1rem 0; color: var(--dash-text-dim); font-style: italic; }
-        .article-preview-content img { max-width: 100%; border-radius: 8px; }
+        .article-preview-content { font-size: 1rem; line-height: 1.8; color: var(--dash-text); }
+        .article-preview-content h1 { font-size: 1.75rem; font-weight: 800; margin: 2rem 0 1rem; color: var(--dash-text); }
+        .article-preview-content h2 { font-size: 1.35rem; font-weight: 700; margin: 1.75rem 0 0.75rem; color: var(--dash-text); border-bottom: 1px solid var(--dash-border); padding-bottom: 0.5rem; }
+        .article-preview-content h3 { font-size: 1.15rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .article-preview-content p { margin: 0 0 1rem; }
+        .article-preview-content ul, .article-preview-content ol { margin: 0.5rem 0 1.25rem; padding-left: 1.75rem; }
+        .article-preview-content li { margin-bottom: 0.5rem; line-height: 1.7; }
+        .article-preview-content a { color: var(--dash-accent); text-decoration: underline; }
+        .article-preview-content table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+        .article-preview-content th { padding: 0.75rem; border: 1px solid var(--dash-border); background: var(--dash-bg); font-weight: 600; text-align: left; }
+        .article-preview-content td { padding: 0.75rem; border: 1px solid var(--dash-border); }
+        .article-preview-content blockquote { border-left: 4px solid var(--dash-accent); padding: 0.75rem 1rem; margin: 1.25rem 0; background: rgba(255,255,255,0.03); border-radius: 0 8px 8px 0; font-style: italic; color: var(--dash-text-dim); }
+        .article-preview-content img { max-width: 100%; border-radius: 8px; margin: 1rem 0; }
+        .article-preview-content code { background: var(--dash-bg); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.875em; }
+        .article-preview-content strong { font-weight: 700; color: var(--dash-text); }
+        .article-preview-content hr { border: none; border-top: 1px solid var(--dash-border); margin: 2rem 0; }
       `}</style>
       <div
         style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 400, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "2rem 1rem", overflowY: "auto" }}
         onClick={onClose}
       >
         <div
-          style={{ background: "var(--dash-card)", border: "1px solid var(--dash-border)", borderRadius: "14px", width: "100%", maxWidth: "780px", boxShadow: "0 32px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}
+          style={{ background: "var(--dash-card)", border: "1px solid var(--dash-border)", borderRadius: "14px", width: "100%", maxWidth: "960px", boxShadow: "0 32px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -185,6 +189,9 @@ function ArticlePreview({
                 {aiTotal != null && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: scoreColor(aiTotal) }}>AI {aiTotal}/100</span>}
                 {article?.quality_score != null && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: scoreColor(article.quality_score) }}>Q {article.quality_score}/100</span>}
               </div>
+              {article?.meta_description && (
+                <div style={{ marginTop: "0.5rem", fontSize: "0.8125rem", color: "var(--dash-text-dim)", fontStyle: "italic", lineHeight: 1.5 }}>{article.meta_description}</div>
+              )}
             </div>
             <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--dash-text-dim)", fontSize: "1.5rem", lineHeight: 1, flexShrink: 0 }}>×</button>
           </div>
@@ -196,7 +203,20 @@ function ArticlePreview({
                 {[...Array(8)].map((_, i) => <div key={i} className="skeleton" style={{ height: i === 0 ? "1.5rem" : "1rem", width: i % 3 === 2 ? "70%" : "100%" }} />)}
               </div>
             ) : article?.body_html ? (
-              <div className="article-preview-content" style={{ fontSize: "0.9rem", lineHeight: 1.75, color: "var(--dash-text)" }} dangerouslySetInnerHTML={{ __html: article.body_html }} />
+              <>
+                <div className="article-preview-content" dangerouslySetInnerHTML={{ __html: article.body_html }} />
+                {article.faq_section?.length > 0 && (
+                  <div style={{ marginTop: "2rem", borderTop: "1px solid var(--dash-border)", paddingTop: "1.5rem" }}>
+                    <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "1rem" }}>Preguntas Frecuentes</h2>
+                    {article.faq_section.map((faq: any, i: number) => (
+                      <details key={i} style={{ marginBottom: "0.75rem", padding: "0.75rem 1rem", background: "rgba(255,255,255,0.03)", borderRadius: "8px", border: "1px solid var(--dash-border)" }}>
+                        <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.95rem" }}>{faq.question}</summary>
+                        <p style={{ marginTop: "0.5rem", fontSize: "0.9rem", lineHeight: 1.7, color: "var(--dash-text-dim)" }}>{faq.answer}</p>
+                      </details>
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
               <div style={{ color: "var(--dash-text-dim)", textAlign: "center", padding: "3rem 0", fontSize: "0.875rem" }}>Sin contenido disponible</div>
             )}
