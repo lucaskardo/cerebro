@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ContentAsset, Site, ContentRecommendation } from "@/lib/api";
-import { api, reviewContent, getContentRecommendations, generateContent, deleteContent } from "@/lib/api";
+import { api, reviewContent, getContentRecommendations, generateContent, deleteContent, submitFeedback, getArticleDetail, type FeedbackPayload } from "@/lib/api";
 import ExportCSV from "@/components/dashboard/ExportCSV";
 
 const STATUS_TABS = ["all", "draft", "review", "approved", "generating", "error"] as const;
@@ -101,181 +101,6 @@ function ScoreDetail({ item, onClose }: { item: ContentAsset; onClose: () => voi
 
 interface Toast { id: number; msg: string; ok: boolean; }
 
-const QUICK_TAGS = ["Tono incorrecto", "Muy genérico", "Datos incorrectos", "Demasiado largo", "Falta diferenciación", "SEO débil"];
-
-function ArticlePreview({
-  itemId,
-  onClose,
-  onAction,
-}: {
-  itemId: string;
-  onClose: () => void;
-  onAction: (id: string, action: "approve" | "reject", notes?: string) => Promise<void>;
-}) {
-  const [article, setArticle] = useState<ContentAsset | null>(null);
-  const [fetching, setFetching] = useState(true);
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [freeText, setFreeText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("cerebro_token") : null;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/content/${itemId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((r) => r.json())
-      .then((data) => { setArticle(data); setFetching(false); })
-      .catch(() => setFetching(false));
-  }, [itemId]);
-
-  function toggleTag(tag: string) {
-    setSelectedTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]);
-  }
-
-  async function handleAction(action: "approve" | "reject") {
-    if (action === "reject" && !showFeedback) {
-      setShowFeedback(true);
-      return;
-    }
-    setSubmitting(true);
-    const notes = action === "reject"
-      ? [...selectedTags, freeText].filter(Boolean).join(" | ")
-      : undefined;
-    await onAction(itemId, action, notes || undefined);
-    setSubmitting(false);
-  }
-
-  const aiTotal = article?.score_humanity != null
-    ? Math.round((article.score_humanity * 0.25) + ((article.score_specificity ?? 0) * 0.25) + ((article.score_structure ?? 0) * 0.2) + ((article.score_seo ?? 0) * 0.2) + ((article.score_readability ?? 0) * 0.1))
-    : null;
-
-  return (
-    <>
-      <style>{`
-        .article-preview-content { font-size: 1rem; line-height: 1.8; color: var(--dash-text); }
-        .article-preview-content h1 { font-size: 1.75rem; font-weight: 800; margin: 2rem 0 1rem; color: var(--dash-text); }
-        .article-preview-content h2 { font-size: 1.35rem; font-weight: 700; margin: 1.75rem 0 0.75rem; color: var(--dash-text); border-bottom: 1px solid var(--dash-border); padding-bottom: 0.5rem; }
-        .article-preview-content h3 { font-size: 1.15rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
-        .article-preview-content p { margin: 0 0 1rem; }
-        .article-preview-content ul, .article-preview-content ol { margin: 0.5rem 0 1.25rem; padding-left: 1.75rem; }
-        .article-preview-content li { margin-bottom: 0.5rem; line-height: 1.7; }
-        .article-preview-content a { color: var(--dash-accent); text-decoration: underline; }
-        .article-preview-content table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
-        .article-preview-content th { padding: 0.75rem; border: 1px solid var(--dash-border); background: var(--dash-bg); font-weight: 600; text-align: left; }
-        .article-preview-content td { padding: 0.75rem; border: 1px solid var(--dash-border); }
-        .article-preview-content blockquote { border-left: 4px solid var(--dash-accent); padding: 0.75rem 1rem; margin: 1.25rem 0; background: rgba(255,255,255,0.03); border-radius: 0 8px 8px 0; font-style: italic; color: var(--dash-text-dim); }
-        .article-preview-content img { max-width: 100%; border-radius: 8px; margin: 1rem 0; }
-        .article-preview-content code { background: var(--dash-bg); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.875em; }
-        .article-preview-content strong { font-weight: 700; color: var(--dash-text); }
-        .article-preview-content hr { border: none; border-top: 1px solid var(--dash-border); margin: 2rem 0; }
-      `}</style>
-      <div
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.72)", zIndex: 400, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "2rem 1rem", overflowY: "auto" }}
-        onClick={onClose}
-      >
-        <div
-          style={{ background: "var(--dash-card)", border: "1px solid var(--dash-border)", borderRadius: "14px", width: "100%", maxWidth: "960px", boxShadow: "0 32px 64px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--dash-border)", display: "flex", alignItems: "flex-start", gap: "1rem", justifyContent: "space-between" }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: "0.9375rem", color: "var(--dash-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {fetching ? "Cargando…" : truncate(article?.title ?? "", 70)}
-              </div>
-              <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.375rem", flexWrap: "wrap" }}>
-                {article?.keyword && <span style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>{article.keyword}</span>}
-                {aiTotal != null && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: scoreColor(aiTotal) }}>AI {aiTotal}/100</span>}
-                {article?.quality_score != null && <span style={{ fontSize: "0.75rem", fontWeight: 700, color: scoreColor(article.quality_score) }}>Q {article.quality_score}/100</span>}
-              </div>
-              {article?.meta_description && (
-                <div style={{ marginTop: "0.5rem", fontSize: "0.8125rem", color: "var(--dash-text-dim)", fontStyle: "italic", lineHeight: 1.5 }}>{article.meta_description}</div>
-              )}
-            </div>
-            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--dash-text-dim)", fontSize: "1.5rem", lineHeight: 1, flexShrink: 0 }}>×</button>
-          </div>
-
-          {/* Body */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem" }}>
-            {fetching ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {[...Array(8)].map((_, i) => <div key={i} className="skeleton" style={{ height: i === 0 ? "1.5rem" : "1rem", width: i % 3 === 2 ? "70%" : "100%" }} />)}
-              </div>
-            ) : article?.body_html ? (
-              <>
-                <div className="article-preview-content" dangerouslySetInnerHTML={{ __html: article.body_html }} />
-                {(article.faq_section?.length ?? 0) > 0 && (
-                  <div style={{ marginTop: "2rem", borderTop: "1px solid var(--dash-border)", paddingTop: "1.5rem" }}>
-                    <h2 style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: "1rem" }}>Preguntas Frecuentes</h2>
-                    {article.faq_section?.map((faq: any, i: number) => (
-                      <details key={i} style={{ marginBottom: "0.75rem", padding: "0.75rem 1rem", background: "rgba(255,255,255,0.03)", borderRadius: "8px", border: "1px solid var(--dash-border)" }}>
-                        <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.95rem" }}>{faq.question}</summary>
-                        <p style={{ marginTop: "0.5rem", fontSize: "0.9rem", lineHeight: 1.7, color: "var(--dash-text-dim)" }}>{faq.answer}</p>
-                      </details>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div style={{ color: "var(--dash-text-dim)", textAlign: "center", padding: "3rem 0", fontSize: "0.875rem" }}>Sin contenido disponible</div>
-            )}
-          </div>
-
-          {/* Footer */}
-          {article?.status === "review" && (
-            <div style={{ borderTop: "1px solid var(--dash-border)", padding: "1rem 1.5rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {showFeedback && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
-                    {QUICK_TAGS.map((tag) => (
-                      <button
-                        key={tag}
-                        onClick={() => toggleTag(tag)}
-                        style={{
-                          padding: "0.25rem 0.625rem", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer",
-                          border: selectedTags.includes(tag) ? "1px solid var(--dash-accent)" : "1px solid var(--dash-border)",
-                          background: selectedTags.includes(tag) ? "var(--dash-accent-dim)" : "transparent",
-                          color: selectedTags.includes(tag) ? "var(--dash-accent)" : "var(--dash-text-dim)",
-                        }}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                  <textarea
-                    value={freeText}
-                    onChange={(e) => setFreeText(e.target.value)}
-                    placeholder="Feedback adicional…"
-                    rows={3}
-                    style={{ width: "100%", background: "var(--dash-bg)", border: "1px solid var(--dash-border)", borderRadius: "8px", padding: "0.625rem 0.75rem", color: "var(--dash-text)", fontSize: "0.8125rem", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }}
-                  />
-                </div>
-              )}
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                <button
-                  disabled={submitting}
-                  onClick={() => handleAction("reject")}
-                  style={{ padding: "0.5rem 1rem", borderRadius: "8px", fontSize: "0.8125rem", fontWeight: 600, border: "1px solid var(--dash-border)", background: "transparent", color: "var(--dash-text-dim)", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.6 : 1 }}
-                >
-                  {showFeedback ? (submitting ? "…" : "Confirmar rechazo") : "Rechazar"}
-                </button>
-                <button
-                  disabled={submitting}
-                  onClick={() => handleAction("approve")}
-                  style={{ padding: "0.5rem 1rem", borderRadius: "8px", fontSize: "0.8125rem", fontWeight: 600, border: "1px solid var(--dash-accent)", background: "var(--dash-accent-dim)", color: "var(--dash-accent)", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.6 : 1 }}
-                >
-                  {submitting ? "…" : "Aprobar"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
 function ContentPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -299,6 +124,14 @@ function ContentPageContent() {
   const [generateKeyword, setGenerateKeyword] = useState("");
   const [generateTopic, setGenerateTopic] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [previewArticle, setPreviewArticle] = useState<any>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackReason, setFeedbackReason] = useState("");
+  const [feedbackSeverity, setFeedbackSeverity] = useState<"low" | "medium" | "high">("medium");
+  const [makeRule, setMakeRule] = useState(false);
+  const [ruleScope, setRuleScope] = useState<"all" | "keyword">("keyword");
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -388,6 +221,44 @@ function ContentPageContent() {
     setGenerating(false);
   }
 
+  async function openPreview(item: ContentAsset) {
+    setPreviewId(item.id);
+    setPreviewLoading(true);
+    setFeedbackText(""); setFeedbackReason(""); setMakeRule(false); setRuleScope("keyword");
+    try {
+      const detail = await getArticleDetail(item.id);
+      setPreviewArticle(detail);
+    } catch { setPreviewArticle(item); }
+    setPreviewLoading(false);
+  }
+
+  function closePreview() {
+    setPreviewId(null); setPreviewArticle(null); setFeedbackText(""); setFeedbackReason("");
+  }
+
+  async function handleFeedback(decision: FeedbackPayload["decision"]) {
+    if (!previewArticle) return;
+    if (decision !== "approve" && decision !== "approve_minor" && !feedbackReason) {
+      addToast("Selecciona una razón", false); return;
+    }
+    setSubmittingFeedback(true);
+    try {
+      await submitFeedback(previewArticle.id, {
+        decision, primary_reason: feedbackReason || undefined,
+        severity: feedbackSeverity, free_text: feedbackText || undefined,
+        make_rule: makeRule, rule_scope: ruleScope,
+      });
+      const msgs: Record<string, string> = {
+        approve: "Artículo aprobado", approve_minor: "Aprobado con nota",
+        regenerate: "Regenerando con feedback...", reject: "Rechazado",
+      };
+      addToast(msgs[decision] || "Done", true);
+      closePreview();
+      setTimeout(() => api.content(undefined, siteId || undefined).then(setItems).catch(() => {}), 2000);
+    } catch (e: any) { addToast(e.message, false); }
+    setSubmittingFeedback(false);
+  }
+
   const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.brand_name || s.domain]));
 
   const counts: Record<string, number> = {};
@@ -411,26 +282,136 @@ function ContentPageContent() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-      <style>{`.title-preview-btn:hover { text-decoration: underline; color: var(--dash-accent) !important; } .title-preview-btn:hover::after { content: " 👁"; font-size: 0.75rem; }`}</style>
+      <style>{`
+        .title-preview-btn:hover { text-decoration: underline; color: var(--dash-accent) !important; }
+        .title-preview-btn:hover::after { content: " 👁"; font-size: 0.75rem; }
+        .article-preview-content h1 { font-size: 1.4rem; font-weight: 700; margin: 1.5rem 0 0.75rem; }
+        .article-preview-content h2 { font-size: 1.2rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+        .article-preview-content h3 { font-size: 1.05rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+        .article-preview-content p { margin: 0.5rem 0; }
+        .article-preview-content ul, .article-preview-content ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+        .article-preview-content li { margin: 0.25rem 0; }
+        .article-preview-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        .article-preview-content th, .article-preview-content td { padding: 6px 10px; border: 1px solid var(--dash-border); }
+        .article-preview-content blockquote { border-left: 3px solid var(--dash-accent); padding-left: 1rem; margin: 1rem 0; font-style: italic; }
+        .article-preview-content hr { border: none; border-top: 1px solid var(--dash-border); margin: 1.5rem 0; }
+        .article-preview-content a { color: var(--dash-accent); text-decoration: underline; }
+      `}</style>
       {scoreDetail && <ScoreDetail item={scoreDetail} onClose={() => setScoreDetail(null)} />}
       {previewId && (
-        <ArticlePreview
-          itemId={previewId}
-          onClose={() => setPreviewId(null)}
-          onAction={async (id, action, notes) => {
-            try {
-              await reviewContent(id, action, notes);
-              setItems(prev => prev.map(i =>
-                i.id === id ? { ...i, status: action === "approve" ? "approved" : "draft" } : i
-              ));
-              addToast(
-                action === "approve" ? "Artículo aprobado" : `Artículo rechazado${notes ? " con feedback" : ""}`,
-                action === "approve"
-              );
-              setPreviewId(null);
-            } catch { addToast("Error al procesar", false); }
-          }}
-        />
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={closePreview}>
+          <div style={{ background: "var(--dash-card)", borderRadius: "12px", width: "min(960px, 95vw)", maxHeight: "90vh", overflowY: "auto", border: "1px solid var(--dash-border)" }} onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--dash-border)", display: "flex", justifyContent: "space-between" }}>
+              <div style={{ flex: 1 }}>
+                <h2 style={{ margin: 0, fontSize: "1.1rem" }}>{previewArticle?.title || "Cargando..."}</h2>
+                {previewArticle?.keyword && <div style={{ fontSize: "0.8rem", color: "var(--dash-text-dim)", marginTop: "4px" }}>Keyword: {previewArticle.keyword}</div>}
+                {previewArticle?.quality_score != null && (
+                  <div style={{ fontSize: "0.8rem", marginTop: "4px" }}>
+                    <span style={{ color: "var(--dash-accent)" }}>AI {previewArticle.score_humanity || 0}/100</span>{" · "}Q {previewArticle.quality_score}/100
+                  </div>
+                )}
+                {previewArticle?.meta_description && <div style={{ fontSize: "0.8rem", color: "var(--dash-text-dim)", marginTop: "4px", fontStyle: "italic" }}>{previewArticle.meta_description}</div>}
+              </div>
+              <button onClick={closePreview} style={{ background: "none", border: "none", color: "var(--dash-text)", fontSize: "1.5rem", cursor: "pointer" }}>×</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: "20px" }}>
+              {previewLoading ? <p style={{ color: "var(--dash-text-dim)" }}>Cargando...</p>
+              : previewArticle?.body_html ? (
+                <div className="article-preview-content" dangerouslySetInnerHTML={{ __html: previewArticle.body_html }} style={{ fontSize: "0.95rem", lineHeight: 1.8 }} />
+              ) : previewArticle?.body_md ? (
+                <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.85rem", color: "var(--dash-text-dim)" }}>{previewArticle.body_md}</pre>
+              ) : <p style={{ color: "var(--dash-text-dim)" }}>Sin contenido.</p>}
+
+              {(previewArticle?.faq_section?.length ?? 0) > 0 && (
+                <div style={{ marginTop: "2rem", borderTop: "1px solid var(--dash-border)", paddingTop: "1.5rem" }}>
+                  <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>Preguntas Frecuentes</h3>
+                  {previewArticle.faq_section?.map((faq: any, i: number) => (
+                    <details key={i} style={{ marginBottom: "0.5rem", padding: "0.5rem 0.75rem", background: "rgba(255,255,255,0.03)", borderRadius: "8px", border: "1px solid var(--dash-border)" }}>
+                      <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.9rem" }}>{faq.question}</summary>
+                      <p style={{ marginTop: "0.5rem", fontSize: "0.85rem", lineHeight: 1.7, color: "var(--dash-text-dim)" }}>{faq.answer}</p>
+                    </details>
+                  ))}
+                </div>
+              )}
+
+              {(previewArticle?.metadata?.feedback_history?.length ?? 0) > 0 && (
+                <div style={{ marginTop: "1.5rem", padding: "10px 14px", background: "rgba(255,200,0,0.05)", borderRadius: "8px", border: "1px solid rgba(255,200,0,0.15)" }}>
+                  <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#f59e0b", marginBottom: "4px" }}>Feedback anterior</div>
+                  {previewArticle.metadata.feedback_history.slice(-3).map((fb: any, i: number) => (
+                    <div key={i} style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", marginBottom: "2px" }}>• [{fb.reason}] {fb.text}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Review panel — only for reviewable articles */}
+            {previewArticle?.status === "review" && previewArticle?.body_html && (
+              <div style={{ padding: "16px 20px", borderTop: "1px solid var(--dash-border)" }}>
+
+                <div style={{ marginBottom: "10px" }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--dash-text-dim)", marginBottom: "6px" }}>¿Qué mejorar? (requerido para regenerar/rechazar)</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                    {[
+                      {v:"accuracy",l:"Dato falso"},{v:"market_specificity",l:"No aplica a Panamá"},
+                      {v:"tone",l:"Tono / voz"},{v:"style",l:"Muy genérico / AI"},
+                      {v:"structure",l:"Estructura"},{v:"seo",l:"SEO débil"},
+                      {v:"product_error",l:"Producto mal"},{v:"competitor_error",l:"Competidor mal"},
+                      {v:"missing_info",l:"Falta info"},{v:"cta",l:"CTA débil"},
+                    ].map(r => (
+                      <button key={r.v} onClick={() => setFeedbackReason(r.v)} style={{
+                        padding: "4px 10px", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer",
+                        border: feedbackReason === r.v ? "1px solid var(--dash-accent)" : "1px solid var(--dash-border)",
+                        background: feedbackReason === r.v ? "rgba(0,255,136,0.08)" : "transparent",
+                        color: feedbackReason === r.v ? "var(--dash-accent)" : "var(--dash-text-dim)",
+                      }}>{r.l}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <textarea value={feedbackText} onChange={e => setFeedbackText(e.target.value)}
+                  placeholder="Describe qué está mal y cómo mejorarlo..."
+                  rows={2} style={{
+                    width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--dash-border)",
+                    background: "var(--dash-bg)", color: "var(--dash-text)", fontSize: "0.8rem",
+                    boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", marginBottom: "8px",
+                  }} />
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", fontSize: "0.8rem" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", color: "var(--dash-text-dim)" }}>
+                    <input type="checkbox" checked={makeRule} onChange={e => setMakeRule(e.target.checked)} />
+                    Regla permanente
+                  </label>
+                  {makeRule && (
+                    <select value={ruleScope} onChange={e => setRuleScope(e.target.value as any)}
+                      style={{ padding: "2px 6px", borderRadius: "4px", border: "1px solid var(--dash-border)", background: "var(--dash-bg)", color: "var(--dash-text)", fontSize: "0.75rem" }}>
+                      <option value="keyword">Solo este keyword</option>
+                      <option value="all">Todos los artículos</option>
+                    </select>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                  <button onClick={() => handleFeedback("reject")} disabled={submittingFeedback}
+                    style={{ padding: "8px 14px", borderRadius: "8px", cursor: "pointer", border: "1px solid #ef4444", background: "transparent", color: "#ef4444", fontSize: "0.8rem" }}>
+                    Rechazar
+                  </button>
+                  <button onClick={() => handleFeedback("regenerate")} disabled={submittingFeedback || !feedbackReason}
+                    style={{ padding: "8px 14px", borderRadius: "8px", cursor: "pointer", border: "1px solid #f59e0b", background: "transparent", color: "#f59e0b", fontSize: "0.8rem", fontWeight: 500, opacity: feedbackReason ? 1 : 0.4 }}>
+                    Regenerar con Feedback
+                  </button>
+                  <button onClick={() => handleFeedback("approve")} disabled={submittingFeedback}
+                    style={{ padding: "8px 14px", borderRadius: "8px", cursor: "pointer", border: "none", background: "var(--dash-accent)", color: "#000", fontWeight: 600, fontSize: "0.8rem" }}>
+                    Aprobar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Toast stack */}
@@ -569,7 +550,7 @@ function ContentPageContent() {
                       <td style={{ maxWidth: "280px", minWidth: 0 }}>
                         <button
                           className="title-preview-btn"
-                          onClick={() => setPreviewId(item.id)}
+                          onClick={() => openPreview(item)}
                           style={{
                             display: "block", overflow: "hidden", textOverflow: "ellipsis",
                             whiteSpace: "nowrap", color: "var(--dash-text)", fontWeight: 500,
@@ -623,32 +604,11 @@ function ContentPageContent() {
                       <td>
                         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
                           {item.status === "review" && (
-                            <>
-                              <button
-                                disabled={isLoading}
-                                onClick={() => handleReview(item, "approve")}
-                                style={{
-                                  padding: "0.25rem 0.625rem", borderRadius: "6px", fontSize: "0.75rem",
-                                  fontWeight: 600, border: "1px solid var(--dash-accent)",
-                                  background: "var(--dash-accent-dim)", color: "var(--dash-accent)",
-                                  cursor: isLoading ? "not-allowed" : "pointer", opacity: isLoading ? 0.6 : 1,
-                                }}
-                              >
-                                {isLoading ? "…" : "Aprobar"}
-                              </button>
-                              <button
-                                disabled={isLoading}
-                                onClick={() => handleReview(item, "reject")}
-                                style={{
-                                  padding: "0.25rem 0.625rem", borderRadius: "6px", fontSize: "0.75rem",
-                                  fontWeight: 600, border: "1px solid var(--dash-border)",
-                                  background: "transparent", color: "var(--dash-text-dim)",
-                                  cursor: isLoading ? "not-allowed" : "pointer", opacity: isLoading ? 0.6 : 1,
-                                }}
-                              >
-                                Rechazar
-                              </button>
-                            </>
+                            <button onClick={() => openPreview(item)} style={{
+                              padding: "4px 12px", borderRadius: "6px", cursor: "pointer",
+                              border: "1px solid var(--dash-accent)", background: "transparent",
+                              color: "var(--dash-accent)", fontSize: "0.75rem", fontWeight: 500,
+                            }}>Revisar</button>
                           )}
                           {item.status === "approved" && (
                             <Link

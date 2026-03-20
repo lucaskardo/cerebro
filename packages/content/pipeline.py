@@ -102,6 +102,61 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
     brand["persona_voice"] = persona_voice
     brand["performance_insights"] = performance_insights
 
+    # ── Load content rules ──────────────────────────────────────────────
+    active_rule_ids = []
+    rules_prompt_section = ""
+    if site_id:
+        try:
+            rules = await db.query("content_rules", params={
+                "select": "id,rule_text,rule_context,rule_exception,category,scope,scope_ref,strength",
+                "site_id": f"eq.{site_id}",
+                "active": "eq.true",
+                "strength": "gte.0.3",
+                "order": "strength.desc",
+                "limit": "15",
+            })
+            applicable = []
+            for r in (rules or []):
+                if r["scope"] == "all":
+                    applicable.append(r)
+                elif r["scope"] == "keyword" and r.get("scope_ref") and r["scope_ref"].lower() in keyword.lower():
+                    applicable.append(r)
+                elif r["scope"] == "category" and r.get("scope_ref"):
+                    applicable.append(r)
+            if applicable:
+                lines = []
+                for r in applicable[:15]:
+                    line = f"- [{r['category']}] {r['rule_text']}"
+                    if r.get("rule_context"):
+                        line += f" (when: {r['rule_context']})"
+                    if r.get("rule_exception"):
+                        line += f" (except: {r['rule_exception']})"
+                    lines.append(line)
+                rules_prompt_section = "\n".join(lines)
+                active_rule_ids = [r["id"] for r in applicable]
+                logger.info(f"[{run_id}] Loaded {len(applicable)} content rules")
+        except Exception as e:
+            logger.warning(f"[{run_id}] Failed to load content rules: {e}")
+
+    if rules_prompt_section:
+        brand["learned_rules"] = rules_prompt_section
+
+    # ── Load regeneration feedback ──────────────────────────────────────
+    if asset_id:
+        try:
+            existing_asset = await db.get_by_id("content_assets", asset_id)
+            asset_meta = (existing_asset or {}).get("metadata") or {}
+            regen_feedback = asset_meta.get("regenerate_feedback", "")
+            if regen_feedback:
+                brand["user_feedback"] = regen_feedback
+            fh = asset_meta.get("feedback_history", [])
+            if fh:
+                recent = [f"- [{fb.get('reason', '')}] {fb.get('text', '')}" for fb in fh[-3:] if fb.get("text")]
+                if recent:
+                    brand["feedback_history"] = "\n".join(recent)
+        except Exception:
+            pass
+
     # Dedup check — skip if very similar keyword already exists for this site
     if site_id:
         dup = await _check_duplicate(keyword, site_id, exclude_id=asset_id)
@@ -290,12 +345,26 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         validation = _validate(humanized, keyword, brand)
         logger.info(f"[{run_id}] Step 4 done in {time.time()-_t:.1f}s")
 
+        # Save active rule IDs for feedback tracking
+        _final_meta = None
+        if active_rule_ids and asset_id:
+            try:
+                current_asset = await db.get_by_id("content_assets", asset_id)
+                current_meta = (current_asset or {}).get("metadata") or {}
+                current_meta["active_rule_ids"] = active_rule_ids
+                _final_meta = current_meta
+            except Exception:
+                pass
+
         status = "review" if validation["passed"] else "draft"
-        await db.update("content_assets", asset_id, {
+        _final_update = {
             "quality_score": validation["quality_score"],
             "validation_results": validation,
             "status": status,
-        })
+        }
+        if _final_meta is not None:
+            _final_update["metadata"] = _final_meta
+        await db.update("content_assets", asset_id, _final_update)
 
         logger.info(f"[{run_id}] Pipeline complete: {status} (quality={validation['quality_score']}, total={time.time()-_pipeline_start:.0f}s)")
 
@@ -505,6 +574,21 @@ async def _generate_draft(brief: dict, brand: dict, run_id: str, sources: list =
             )
         )
 
+    rules_section = ""
+    if brand.get("learned_rules"):
+        rules_section = f"""
+LEARNED WRITING RULES (from reviewer feedback — follow ALL):
+{brand['learned_rules']}
+"""
+
+    feedback_section = ""
+    if brand.get("user_feedback"):
+        feedback_section = f"""
+REVIEWER FEEDBACK ON PREVIOUS VERSION — address ALL points:
+{brand['user_feedback']}
+{('Previous corrections:' + chr(10) + brand.get('feedback_history', '')) if brand.get('feedback_history') else ''}
+"""
+
     result = await complete(
         prompt=prompts.DRAFT_USER.format(
             title=title,
@@ -517,7 +601,7 @@ async def _generate_draft(brief: dict, brand: dict, run_id: str, sources: list =
             target_word_count=brief.get("target_word_count", 1500),
             client_intelligence=brand.get("client_intelligence", ""),
             sources_context=sources_context,
-        ),
+        ) + rules_section + feedback_section,
         system=prompts.DRAFT_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "experto en el tema"),
             brand_tone=brand.get("brand_tone", "directo, honesto, útil"),

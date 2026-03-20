@@ -714,3 +714,28 @@ export async function patchIntelligenceProfile(
   if (!res.ok) throw new Error(`Patch failed: ${res.status}`);
   return res.json();
 }
+
+export interface FeedbackPayload {
+  decision: "approve" | "approve_minor" | "regenerate" | "reject";
+  primary_reason?: string;
+  severity?: "low" | "medium" | "high";
+  free_text?: string;
+  make_rule?: boolean;
+  rule_scope?: "all" | "keyword";
+}
+
+export async function submitFeedback(assetId: string, payload: FeedbackPayload): Promise<{ ok: boolean; rule_created?: boolean }> {
+  const res = await fetch(`${API_URL}/api/content/${assetId}/feedback`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Feedback failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getArticleDetail(assetId: string): Promise<ContentAsset & { body_html?: string; metadata?: any }> {
+  const res = await fetch(`${API_URL}/api/content/${assetId}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  return res.json();
+}
