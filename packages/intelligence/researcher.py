@@ -160,7 +160,7 @@ async def extract_facts(
             model="haiku",
             max_tokens=2048,
             temperature=0.2,
-            json_mode=True,
+            json_mode=False,
             pipeline_step="research_extraction",
         )
 
@@ -171,13 +171,27 @@ async def extract_facts(
         }
 
         text = result.get("text", "")
-        # Parse JSON — handle potential markdown wrapping
-        text = re.sub(r"^```json\s*", "", text.strip())
-        text = re.sub(r"\s*```$", "", text.strip())
+        # Try bare JSON array first
+        parsed = None
+        for pattern in [
+            lambda t: json.loads(t),
+            lambda t: json.loads(re.search(r'\[[\s\S]*\]', t).group()),
+            lambda t: json.loads(re.search(r'\{[\s\S]*\}', t).group()),
+        ]:
+            try:
+                parsed = pattern(text)
+                break
+            except Exception:
+                continue
 
-        parsed = json.loads(text)
+        if parsed is None:
+            parsed = []
+
+        # Handle wrapped formats: {"facts": [...]} or bare list
+        if isinstance(parsed, dict):
+            parsed = parsed.get("facts") or parsed.get("results") or parsed.get("data") or []
         if not isinstance(parsed, list):
-            parsed = [parsed] if isinstance(parsed, dict) else []
+            parsed = []
 
         # Filter by confidence
         facts = [
