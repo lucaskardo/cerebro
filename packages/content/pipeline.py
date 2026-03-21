@@ -97,6 +97,20 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         except Exception as e:
             logger.warning(f"[{run_id}] Could not load persona_voice: {e}")
 
+    # ── Knowledge injection (4 tiers) ────────────────────────────────────
+    knowledge_fact_ids: list = []
+    if site_id:
+        try:
+            from packages.intelligence.knowledge_engine import build_knowledge_context
+            k_context, knowledge_fact_ids = await build_knowledge_context(site_id, keyword)
+            if k_context:
+                # Append knowledge context to client_intelligence
+                sep = "\n\n" if client_intelligence else ""
+                client_intelligence = client_intelligence + sep + k_context
+                logger.info(f"[{run_id}] Injected {len(knowledge_fact_ids)} knowledge facts")
+        except Exception as e:
+            logger.warning(f"[{run_id}] Knowledge injection failed (non-fatal): {e}")
+
     brand["client_intelligence"] = client_intelligence
     brand["content_library"] = content_library
     brand["persona_voice"] = persona_voice
@@ -108,12 +122,12 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
     if site_id:
         try:
             rules = await db.query("content_rules", params={
-                "select": "id,rule_text,rule_context,rule_exception,category,scope,scope_ref,strength",
+                "select": "id,rule_text,rule_context,rule_exception,category,scope,scope_ref,strength,rule_polarity",
                 "site_id": f"eq.{site_id}",
-                "active": "eq.true",
+                "status": "not.in.(inactive,suspended)",
                 "strength": "gte.0.3",
                 "order": "strength.desc",
-                "limit": "15",
+                "limit": "30",
             })
             applicable = []
             for r in (rules or []):
@@ -123,9 +137,26 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                     applicable.append(r)
                 elif r["scope"] == "category" and r.get("scope_ref"):
                     applicable.append(r)
+
+            # Polarity balance: max 3 negative + 4 positive, max 1 per category, max 7 total
+            seen_categories: set = set()
+            neg_rules, pos_rules = [], []
+            for r in applicable:
+                cat = r.get("category", "other")
+                if cat in seen_categories:
+                    continue
+                seen_categories.add(cat)
+                polarity = r.get("rule_polarity") or "negative"
+                if polarity == "positive":
+                    pos_rules.append(r)
+                else:
+                    neg_rules.append(r)
+            balanced = pos_rules[:4] + neg_rules[:3]
+            applicable = balanced[:7]
+
             if applicable:
                 lines = []
-                for r in applicable[:15]:
+                for r in applicable:
                     line = f"- [{r['category']}] {r['rule_text']}"
                     if r.get("rule_context"):
                         line += f" (when: {r['rule_context']})"
@@ -135,6 +166,18 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                 rules_prompt_section = "\n".join(lines)
                 active_rule_ids = [r["id"] for r in applicable]
                 logger.info(f"[{run_id}] Loaded {len(applicable)} content rules")
+
+            # Increment times_applied for all applied rules
+            if active_rule_ids:
+                for rid in active_rule_ids:
+                    try:
+                        r = await db.get_by_id("content_rules", rid)
+                        if r:
+                            await db.update("content_rules", rid, {
+                                "times_applied": (r.get("times_applied") or 0) + 1
+                            })
+                    except Exception:
+                        pass
         except Exception as e:
             logger.warning(f"[{run_id}] Failed to load content rules: {e}")
 
@@ -345,13 +388,15 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         validation = _validate(humanized, keyword, brand)
         logger.info(f"[{run_id}] Step 4 done in {time.time()-_t:.1f}s")
 
-        # Save active rule IDs for feedback tracking
+        # Save active rule IDs and knowledge fact IDs for feedback tracking
         _final_meta = None
-        if active_rule_ids and asset_id:
+        if asset_id:
             try:
                 current_asset = await db.get_by_id("content_assets", asset_id)
                 current_meta = (current_asset or {}).get("metadata") or {}
-                current_meta["active_rule_ids"] = active_rule_ids
+                if active_rule_ids:
+                    current_meta["active_rule_ids"] = active_rule_ids
+                current_meta["knowledge_fact_ids"] = knowledge_fact_ids
                 _final_meta = current_meta
             except Exception:
                 pass

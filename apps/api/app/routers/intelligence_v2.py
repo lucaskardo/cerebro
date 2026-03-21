@@ -1,6 +1,7 @@
 """Intelligence v2 router — structured intelligence layer endpoints."""
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from pydantic import BaseModel
 from typing import Optional, List
 
 from packages.core import db, get_logger
@@ -255,3 +256,49 @@ async def migrate_site(site_id: str):
     except Exception as e:
         logger.error(f"migration {site_id}: {e}", exc_info=True)
         return {"ok": False, "error": str(e)}
+
+
+# ── Knowledge Engine endpoints ──────────────────────────────────────────────
+
+class IngestUrlRequest(BaseModel):
+    url: str
+    label: Optional[str] = None
+
+
+@router.post("/knowledge/cold-start/{site_id}", dependencies=[Depends(require_auth)])
+async def cold_start(site_id: str, bg: BackgroundTasks):
+    """Generate ~60 llm_seed facts from Haiku training data. Runs in background."""
+    async def _run():
+        try:
+            from packages.intelligence.knowledge_engine import cold_start_knowledge
+            result = await cold_start_knowledge(site_id)
+            logger.info(f"cold_start {site_id}: {result}")
+        except Exception as e:
+            logger.error(f"cold_start {site_id}: {e}", exc_info=True)
+    bg.add_task(_run)
+    return {"ok": True, "message": "Cold start running in background"}
+
+
+@router.post("/knowledge/ingest/{site_id}", dependencies=[Depends(require_auth)])
+async def ingest_knowledge_url(site_id: str, body: IngestUrlRequest, bg: BackgroundTasks):
+    """Extract authority_claim facts from an authority URL. Runs in background."""
+    async def _run():
+        try:
+            from packages.intelligence.knowledge_engine import ingest_url
+            result = await ingest_url(site_id, body.url, body.label)
+            logger.info(f"ingest_url {site_id} {body.url}: {result}")
+        except Exception as e:
+            logger.error(f"ingest_url {site_id}: {e}", exc_info=True)
+    bg.add_task(_run)
+    return {"ok": True, "message": f"Ingesting {body.url} in background"}
+
+
+@router.get("/knowledge/{site_id}", dependencies=[Depends(require_auth)])
+async def get_knowledge_stats(site_id: str):
+    """Return knowledge fact counts by type and category."""
+    try:
+        from packages.intelligence.knowledge_engine import get_knowledge_stats
+        return await get_knowledge_stats(site_id)
+    except Exception as e:
+        logger.error(f"knowledge_stats {site_id}: {e}", exc_info=True)
+        return {"error": str(e)}

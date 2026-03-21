@@ -39,9 +39,12 @@ JSON exacto:
 }}"""
 
 DRAFT_SYSTEM = """Eres {brand_persona}.
-Tono: {brand_tone}.
+Tono: {brand_tone}. Voz: amigo que sabe mucho — conversacional con datos, NO experto académico.
 
 {client_intelligence}
+
+REGLA DE CONTRADICCIONES: Cuando datos globales y locales (Panamá) contradigan,
+SIEMPRE resuelve con recomendación concreta para Panamá. Nunca dejes la tensión abierta.
 
 REGLAS DE ESTRUCTURA GEO (Generative Engine Optimization):
 1. TL;DR al inicio: 2-3 oraciones que respondan directamente la intención de búsqueda (Google AI Overviews)

@@ -299,7 +299,9 @@ async def submit_feedback(asset_id: str, request: Request, bg: BackgroundTasks):
     rule_scope = body.get("rule_scope", "keyword")
     site_id = asset.get("site_id", "")
 
-    # Save feedback event
+    # Save feedback event (policy_set = rules that were active when this article was generated)
+    asset_metadata = asset.get("metadata") or {}
+    policy_set = asset_metadata.get("active_rule_ids") or []
     event = await db.insert("feedback_events", {
         "site_id": site_id,
         "asset_id": asset_id,
@@ -309,11 +311,12 @@ async def submit_feedback(asset_id: str, request: Request, bg: BackgroundTasks):
         "free_text": free_text or None,
         "make_rule": make_rule,
         "rule_scope": rule_scope,
+        "policy_set": policy_set,
         "quality_score_at_review": asset.get("quality_score"),
     })
 
     # Save to asset metadata for backward compat
-    metadata = asset.get("metadata") or {}
+    metadata = asset_metadata
     fh = metadata.get("feedback_history", [])
     fh.append({
         "decision": decision, "reason": primary_reason,
@@ -329,6 +332,17 @@ async def submit_feedback(asset_id: str, request: Request, bg: BackgroundTasks):
     if make_rule and free_text and free_text.strip():
         scope_ref = asset.get("keyword", "")[:100] if rule_scope == "keyword" else None
         try:
+            # Warn if similar rule already exists (same category + scope)
+            existing_rules = await db.query("content_rules", params={
+                "select": "id,rule_text",
+                "site_id": f"eq.{site_id}",
+                "category": f"eq.{primary_reason if primary_reason in FEEDBACK_CATEGORIES else 'other'}",
+                "scope": f"eq.{rule_scope}",
+                "status": "not.in.(inactive,suspended)",
+                "limit": "1",
+            })
+            if existing_rules:
+                logger.warning(f"Similar rule exists for category={primary_reason} scope={rule_scope}: {existing_rules[0].get('id')}")
             rule = await db.insert("content_rules", {
                 "site_id": site_id,
                 "rule_text": free_text.strip()[:200],
@@ -377,9 +391,8 @@ async def _boost_active_rules(rule_ids: list):
             if not r:
                 continue
             new_helped = (r.get("times_helped", 0) or 0) + 1
-            new_applied = (r.get("times_applied", 0) or 0) + 1
             new_strength = min(1.0, (r.get("strength", 0.5) + 0.05))
-            updates = {"strength": new_strength, "times_helped": new_helped, "times_applied": new_applied}
+            updates = {"strength": new_strength, "times_helped": new_helped}
             if new_helped >= 3 and r.get("status") == "testing":
                 updates["status"] = "proven"
             if new_helped >= 6 and r.get("status") == "proven":
@@ -399,10 +412,8 @@ async def _weaken_matching_rules(rule_ids: list, failed_reason: str = ""):
             if r.get("category") == failed_reason or not failed_reason:
                 new_strength = max(0.0, (r.get("strength", 0.5) - 0.1))
                 new_failed = (r.get("times_failed", 0) or 0) + 1
-                new_applied = (r.get("times_applied", 0) or 0) + 1
-                updates = {"strength": new_strength, "times_failed": new_failed, "times_applied": new_applied}
-                if new_strength < 0.2 and new_applied >= 5:
-                    updates["active"] = False
+                updates = {"strength": new_strength, "times_failed": new_failed}
+                if new_strength < 0.2 and r.get("times_applied", 0) >= 5:
                     updates["status"] = "inactive"
                 await db.update("content_rules", rid, updates)
         except Exception:

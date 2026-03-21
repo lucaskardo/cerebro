@@ -127,7 +127,7 @@ function ContentPageContent() {
   const [previewArticle, setPreviewArticle] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
-  const [feedbackReason, setFeedbackReason] = useState("");
+  const [feedbackReason, setFeedbackReason] = useState<string[]>([]);
   const [feedbackSeverity, setFeedbackSeverity] = useState<"low" | "medium" | "high">("medium");
   const [makeRule, setMakeRule] = useState(false);
   const [ruleScope, setRuleScope] = useState<"all" | "keyword">("keyword");
@@ -224,7 +224,7 @@ function ContentPageContent() {
   async function openPreview(item: ContentAsset) {
     setPreviewId(item.id);
     setPreviewLoading(true);
-    setFeedbackText(""); setFeedbackReason(""); setMakeRule(false); setRuleScope("keyword");
+    setFeedbackText(""); setFeedbackReason([]); setMakeRule(false); setRuleScope("keyword");
     try {
       const detail = await getArticleDetail(item.id);
       setPreviewArticle(detail);
@@ -233,7 +233,7 @@ function ContentPageContent() {
   }
 
   function closePreview() {
-    setPreviewId(null); setPreviewArticle(null); setFeedbackText(""); setFeedbackReason("");
+    setPreviewId(null); setPreviewArticle(null); setFeedbackText(""); setFeedbackReason([]);
   }
 
   async function handleFeedback(decision: FeedbackPayload["decision"]) {
@@ -242,13 +242,13 @@ function ContentPageContent() {
       closePreview();
       return;
     }
-    if (decision === "regenerate" && !feedbackReason) {
+    if (decision === "regenerate" && feedbackReason.length === 0) {
       addToast("Selecciona una razón para regenerar", false); return;
     }
     setSubmittingFeedback(true);
     try {
       await submitFeedback(previewArticle.id, {
-        decision, primary_reason: feedbackReason || undefined,
+        decision, primary_reason: feedbackReason.length > 0 ? feedbackReason.join(",") : undefined,
         severity: feedbackSeverity, free_text: feedbackText || undefined,
         make_rule: makeRule, rule_scope: ruleScope,
       });
@@ -366,11 +366,13 @@ function ContentPageContent() {
                       {v:"product_error",l:"Producto mal"},{v:"competitor_error",l:"Competidor mal"},
                       {v:"missing_info",l:"Falta info"},{v:"cta",l:"CTA débil"},
                     ].map(r => (
-                      <button key={r.v} onClick={() => setFeedbackReason(r.v)} style={{
+                      <button key={r.v} onClick={() => setFeedbackReason(prev =>
+                        prev.includes(r.v) ? prev.filter(x => x !== r.v) : [...prev, r.v]
+                      )} style={{
                         padding: "4px 10px", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer",
-                        border: feedbackReason === r.v ? "1px solid var(--dash-accent)" : "1px solid var(--dash-border)",
-                        background: feedbackReason === r.v ? "rgba(0,255,136,0.08)" : "transparent",
-                        color: feedbackReason === r.v ? "var(--dash-accent)" : "var(--dash-text-dim)",
+                        border: feedbackReason.includes(r.v) ? "1px solid var(--dash-accent)" : "1px solid var(--dash-border)",
+                        background: feedbackReason.includes(r.v) ? "rgba(0,255,136,0.08)" : "transparent",
+                        color: feedbackReason.includes(r.v) ? "var(--dash-accent)" : "var(--dash-text-dim)",
                       }}>{r.l}</button>
                     ))}
                   </div>
@@ -403,8 +405,8 @@ function ContentPageContent() {
                     style={{ padding: "8px 14px", borderRadius: "8px", cursor: "pointer", border: "1px solid #ef4444", background: "transparent", color: "#ef4444", fontSize: "0.8rem" }}>
                     Rechazar
                   </button>
-                  <button onClick={() => handleFeedback("regenerate")} disabled={submittingFeedback || !feedbackReason}
-                    style={{ padding: "8px 14px", borderRadius: "8px", cursor: "pointer", border: "1px solid #f59e0b", background: "transparent", color: "#f59e0b", fontSize: "0.8rem", fontWeight: 500, opacity: feedbackReason ? 1 : 0.4 }}>
+                  <button onClick={() => handleFeedback("regenerate")} disabled={submittingFeedback || feedbackReason.length === 0}
+                    style={{ padding: "8px 14px", borderRadius: "8px", cursor: "pointer", border: "1px solid #f59e0b", background: "transparent", color: "#f59e0b", fontSize: "0.8rem", fontWeight: 500, opacity: feedbackReason.length > 0 ? 1 : 0.4 }}>
                     Regenerar con Feedback
                   </button>
                   <button onClick={() => handleFeedback("approve")} disabled={submittingFeedback}
