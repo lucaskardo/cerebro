@@ -1,29 +1,30 @@
 "use client";
 import Link from "next/link";
 
-const AUTHOR = "Dra. Sofía Reyes";
-
 export default function Footer() {
   return (
-    <footer className="bg-primary text-text-dark mt-20">
+    <footer className="bg-primary-600 text-white mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
           {/* Brand */}
           <div className="md:col-span-1">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-2xl">🌙</span>
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-7 h-7 rounded-full bg-gold-400 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-primary-700" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" />
+                </svg>
+              </div>
               <span className="font-serif font-bold text-xl">ColchonesPanamá</span>
             </div>
-            <p className="text-sm text-gray-400 leading-relaxed mb-4">
-              La guía independiente de colchones más completa de Panamá. Sin patrocinios.
-              Sin sesgos.
+            <p className="text-sm text-primary-200 leading-relaxed mb-4">
+              La guía independiente de colchones más completa de Panamá. Sin patrocinios. Sin sesgos.
             </p>
             <div className="flex gap-3">
               <a
                 href="https://instagram.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-9 h-9 rounded-lg bg-white/10 hover:bg-accent-600 flex items-center justify-center text-sm transition-colors"
+                className="w-9 h-9 rounded-lg bg-white/10 hover:bg-accent-500 flex items-center justify-center text-sm transition-colors"
                 aria-label="Instagram"
               >
                 📸
@@ -32,7 +33,7 @@ export default function Footer() {
                 href="https://tiktok.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-9 h-9 rounded-lg bg-white/10 hover:bg-accent-600 flex items-center justify-center text-sm transition-colors"
+                className="w-9 h-9 rounded-lg bg-white/10 hover:bg-accent-500 flex items-center justify-center text-sm transition-colors"
                 aria-label="TikTok"
               >
                 🎵
@@ -40,23 +41,22 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Contenido Popular */}
+          {/* Guías */}
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">
-              Contenido Popular
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-primary-300 mb-4">
+              Guías
             </h4>
             <ul className="space-y-2.5">
               {[
-                { label: "Mejores Colchones 2026", href: "/mejores" },
-                { label: "Quiz: ¿Cuál es tu colchón?", href: "/quiz" },
-                { label: "Colchón para dolor de espalda", href: "/blog" },
-                { label: "NauralSleep Review", href: "/blog" },
-                { label: "Colchón vs Clima Tropical", href: "/blog" },
+                { label: "¿Por qué me duele la espalda?", href: "/guia/dolor-espalda" },
+                { label: "¿Cada cuánto cambiar el colchón?", href: "/guia/cada-cuanto-cambiar" },
+                { label: "Materiales: qué funciona vs marketing", href: "/guia/materiales" },
+                { label: "Guía de compra completa", href: "/blog" },
               ].map((l) => (
                 <li key={l.href + l.label}>
                   <Link
                     href={l.href}
-                    className="text-sm text-gray-400 hover:text-accent-400 transition-colors"
+                    className="text-sm text-primary-200 hover:text-gold-400 transition-colors"
                   >
                     {l.label}
                   </Link>
@@ -65,21 +65,22 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Herramientas */}
+          {/* Rankings */}
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">
-              Herramientas
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-primary-300 mb-4">
+              Rankings
             </h4>
             <ul className="space-y-2.5">
               {[
-                { label: "Quiz de Colchón", href: "/quiz" },
-                { label: "Comparativa de Marcas", href: "/mejores" },
-                { label: "Guía de Compra", href: "/blog" },
+                { label: "Mejores Colchones 2026", href: "/mejores" },
+                { label: "Mejor para dolor de espalda", href: "/mejores" },
+                { label: "Mejor relación precio/calidad", href: "/mejores" },
+                { label: "Comparador de marcas", href: "/comparar" },
               ].map((l) => (
                 <li key={l.label}>
                   <Link
                     href={l.href}
-                    className="text-sm text-gray-400 hover:text-accent-400 transition-colors"
+                    className="text-sm text-primary-200 hover:text-gold-400 transition-colors"
                   >
                     {l.label}
                   </Link>
@@ -88,31 +89,29 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Sobre + Legal */}
+          {/* Herramientas + Legal */}
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">
-              Sobre
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-primary-300 mb-4">
+              Herramientas
             </h4>
             <ul className="space-y-2.5 mb-6">
               {[
-                { label: "Sobre Nosotros", href: "/sobre" },
+                { label: "Quiz: tu colchón ideal", href: "/quiz" },
+                { label: "Comparador interactivo", href: "/comparar" },
+                { label: "Sobre nosotros", href: "/sobre" },
                 { label: "Metodología", href: "/sobre#metodologia" },
-                { label: "Contacto", href: "/contacto" },
               ].map((l) => (
                 <li key={l.label}>
                   <Link
                     href={l.href}
-                    className="text-sm text-gray-400 hover:text-accent-400 transition-colors"
+                    className="text-sm text-primary-200 hover:text-gold-400 transition-colors"
                   >
                     {l.label}
                   </Link>
                 </li>
               ))}
             </ul>
-            <h4 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-4">
-              Legal
-            </h4>
-            <ul className="space-y-2.5">
+            <ul className="space-y-2">
               {[
                 { label: "Privacidad", href: "/privacidad" },
                 { label: "Términos", href: "/terminos" },
@@ -120,7 +119,7 @@ export default function Footer() {
                 <li key={l.label}>
                   <Link
                     href={l.href}
-                    className="text-sm text-gray-400 hover:text-accent-400 transition-colors"
+                    className="text-xs text-primary-400 hover:text-white transition-colors"
                   >
                     {l.label}
                   </Link>
@@ -130,40 +129,12 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Newsletter */}
-        <div className="border-t border-white/10 mt-12 pt-10">
-          <div className="max-w-xl">
-            <h4 className="font-serif text-lg font-bold mb-2">Consejos de sueño cada semana</h4>
-            <p className="text-sm text-gray-400 mb-4">
-              Guías actualizadas, comparativas honestas y las mejores ofertas en colchones en Panamá.
-            </p>
-            <form
-              onSubmit={(e) => e.preventDefault()}
-              className="flex gap-2"
-            >
-              <input
-                type="email"
-                placeholder="tu@email.com"
-                className="flex-1 px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-accent-400"
-              />
-              <button
-                type="submit"
-                className="px-5 py-2.5 bg-accent-600 hover:bg-accent-500 text-white text-sm font-semibold rounded-xl transition-colors whitespace-nowrap"
-              >
-                Suscribirme
-              </button>
-            </form>
-          </div>
-        </div>
-
         {/* Bottom bar */}
-        <div className="border-t border-white/10 mt-10 pt-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="text-xs text-gray-500">
-            <span>Escrito por {AUTHOR} · Contenido actualizado semanalmente</span>
-            <br className="md:hidden" />
-            <span className="md:ml-4">© 2026 ColchonesPanamá.com · Todos los derechos reservados</span>
+        <div className="border-t border-white/10 mt-12 pt-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="text-xs text-primary-300">
+            <span>© 2026 ColchonesPanamá.com · Todos los derechos reservados</span>
           </div>
-          <p className="text-xs text-gray-600 max-w-md">
+          <p className="text-xs text-primary-400 max-w-md">
             Algunos enlaces pueden generar una comisión. Esto no afecta nuestras recomendaciones.
           </p>
         </div>

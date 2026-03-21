@@ -1,16 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --color-primary: #1a1f36;
-  --color-accent: #0d9488;
-  --color-gold: #d4a853;
-  --bg-light: #fafaf8;
+  --color-primary: #2D3561;
+  --color-accent: #8B7FB5;
+  --color-gold: #C8A96E;
+  --bg-light: #F5F0EB;
   --card-light: #ffffff;
-  --text-light: #1a1f36;
+  --text-light: #2D3561;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -39,17 +39,17 @@ body {
   top: 0;
   left: 0;
   height: 3px;
-  background: linear-gradient(90deg, #0d9488, #d4a853);
+  background: linear-gradient(90deg, #8B7FB5, #C8A96E);
   z-index: 9999;
   transition: width 0.1s linear;
 }
 
 /* Article prose overrides */
 .article-body h2 {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Source Serif 4', Georgia, serif;
   font-size: 1.75rem;
   font-weight: 700;
-  color: #1a1f36;
+  color: #2D3561;
   margin-top: 2.5rem;
   margin-bottom: 1rem;
   line-height: 1.3;
@@ -60,10 +60,10 @@ body {
 }
 
 .article-body h3 {
-  font-family: 'Playfair Display', Georgia, serif;
+  font-family: 'Source Serif 4', Georgia, serif;
   font-size: 1.35rem;
   font-weight: 600;
-  color: #1a1f36;
+  color: #2D3561;
   margin-top: 2rem;
   margin-bottom: 0.75rem;
 }
@@ -100,8 +100,8 @@ body {
 }
 
 .article-body blockquote {
-  border-left: 4px solid #0d9488;
-  background: #f0fdfa;
+  border-left: 4px solid #8B7FB5;
+  background: #f4f2f9;
   padding: 1rem 1.5rem;
   border-radius: 0 0.5rem 0.5rem 0;
   margin: 1.5rem 0;
@@ -124,7 +124,7 @@ body {
 }
 
 .article-body th {
-  background: #1a1f36;
+  background: #2D3561;
   color: white;
   padding: 0.75rem 1rem;
   text-align: left;
@@ -132,7 +132,7 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
-  .article-body th { background: #0d9488; }
+  .article-body th { background: #8B7FB5; }
 }
 
 .article-body td {
@@ -155,8 +155,8 @@ body {
 
 /* Recommendation box */
 .recommendation-box {
-  border: 2px solid #0d9488;
-  background: linear-gradient(135deg, #f0fdfa 0%, #fff 100%);
+  border: 2px solid #8B7FB5;
+  background: linear-gradient(135deg, #f4f2f9 0%, #fff 100%);
   border-radius: 0.75rem;
   padding: 1.5rem;
   margin: 2rem 0;
