@@ -261,6 +261,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         _t = time.time()
         logger.info(f"[{run_id}] Step 1/4: Generating brief...")
         brief = await _generate_brief(keyword, brand, research, run_id)
+        brief["keyword"] = keyword  # Pass keyword through to draft prompt
         logger.info(f"[{run_id}] Step 1 done in {time.time()-_t:.1f}s")
         await db.update("content_assets", asset_id, {"brief": brief})
 
@@ -307,28 +308,25 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
             except Exception as e:
                 logger.warning(f"[{run_id}] Internal links step failed (non-fatal): {e}")
 
-        # STEP 3: Humanize
-        _t = time.time()
-        logger.info(f"[{run_id}] Step 3/4: Humanizing...")
-        humanized = await _humanize(draft, brand, run_id)
-        logger.info(f"[{run_id}] Step 3 done in {time.time()-_t:.1f}s")
+        # STEP 3: Post-processing (anti-words + HTML conversion)
+        # NOTE: Humanize step removed in session 8. Draft prompt now includes
+        # persona voice, narrative arc, and humanization instructions directly.
+        # This avoids quality degradation from a weaker model rewriting Sonnet output.
 
         # STEP 3.1: Strip anti-AI words
         _t = time.time()
         try:
             from packages.content.anti_words import clean_anti_words
-            body_md_clean, removed = clean_anti_words(humanized.get("body_md", ""))
-            body_html_clean, _ = clean_anti_words(humanized.get("body_html", ""))
+            body_md_clean, removed = clean_anti_words(draft.get("body_md", ""))
             if removed:
                 logger.info(f"[{run_id}] Anti-words removed ({len(removed)}): {removed[:5]}")
-            humanized["body_md"] = body_md_clean
-            humanized["body_html"] = body_html_clean
+            draft["body_md"] = body_md_clean
             logger.info(f"[{run_id}] Step 3.1 (anti-words) done in {time.time()-_t:.1f}s")
         except Exception as e:
             logger.warning(f"[{run_id}] Anti-words step failed (non-fatal): {e}")
 
-        # Convert body_md → body_html (LLM no longer outputs HTML to save tokens)
-        _body_md_final = humanized.get("body_md", draft.get("body_md", ""))
+        # Convert body_md → body_html
+        _body_md_final = draft.get("body_md", "")
         try:
             import markdown as _md
             _body_html_raw = _md.markdown(
@@ -336,23 +334,22 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                 extensions=["tables", "fenced_code"],
             )
         except Exception:
-            # Minimal fallback: wrap paragraphs in <p>
             _body_html_raw = "\n".join(
                 f"<p>{line}</p>" if line.strip() and not line.startswith("#") else line
                 for line in _body_md_final.split("\n")
             )
-        humanized["body_html"] = _body_html_raw
+        draft["body_html"] = _body_html_raw
 
         # Inject UTM params into all article links
-        raw_html = humanized.get("body_html", "")
+        raw_html = draft.get("body_html", "")
         site_slug = site.get("domain", "cerebro").split(".")[0] if site else "cerebro"
         body_html_with_utm = _inject_utm_params(raw_html, site_slug, asset_id)
 
         await db.update("content_assets", asset_id, {
-            "title": humanized.get("title", draft.get("title")),
-            "body_md": humanized.get("body_md", draft.get("body_md")),
+            "title": draft.get("title", keyword),
+            "body_md": draft.get("body_md", ""),
             "body_html": body_html_with_utm,
-            "humanization_score": humanized.get("humanization_score", 0),
+            "humanization_score": 0,  # No separate humanize step
         })
 
         # STEP 3.5: Score (5 dimensions)
@@ -362,8 +359,8 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
             from packages.content.scorer import score_content
             site_context = brand.get("client_intelligence") or brand.get("partner_name", "")
             scores = await score_content(
-                title=humanized.get("title", keyword),
-                body_md=humanized.get("body_md", ""),
+                title=draft.get("title", keyword),
+                body_md=draft.get("body_md", ""),
                 keyword=keyword,
                 site_context=site_context,
                 run_id=run_id,
@@ -377,7 +374,6 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                 "score_readability": scores["readability"],
                 "score_feedback":    scores.get("feedback", ""),
             }
-            # If total < 65 mark as low_quality in metadata
             if scores["total"] < 65:
                 existing_asset = await db.get_by_id("content_assets", asset_id)
                 meta = (existing_asset or {}).get("metadata") or {}
@@ -392,7 +388,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         # STEP 4: Validate
         _t = time.time()
         logger.info(f"[{run_id}] Step 4/4: Validating...")
-        validation = _validate(humanized, keyword, brand)
+        validation = _validate(draft, keyword, brand)
         logger.info(f"[{run_id}] Step 4 done in {time.time()-_t:.1f}s")
 
         # Save active rule IDs and knowledge fact IDs for feedback tracking
@@ -423,7 +419,7 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
         # Alert operator
         score_total = scores.get("total", 0) if isinstance(scores, dict) else 0
         low_q = score_total > 0 and score_total < 65
-        alert_msg = f"'{humanized.get('title', keyword)}' → {status} (calidad: {validation['quality_score']}%"
+        alert_msg = f"'{draft.get('title', keyword)}' → {status} (calidad: {validation['quality_score']}%"
         if score_total:
             alert_msg += f", AI score: {score_total}/100"
         if low_q:
@@ -641,14 +637,27 @@ REVIEWER FEEDBACK ON PREVIOUS VERSION — address ALL points:
 {('Previous corrections:' + chr(10) + brand.get('feedback_history', '')) if brand.get('feedback_history') else ''}
 """
 
+    # Build persona block for system prompt
+    persona_voice = brand.get("persona_voice")
+    persona_block = ""
+    if persona_voice and isinstance(persona_voice, dict):
+        persona_block = (
+            f"PERSONA: Escribe como {persona_voice.get('name', '')}.\n"
+            f"Título: {persona_voice.get('title', '')}\n"
+            f"Tono: {persona_voice.get('tone', '')}\n"
+            f"Frases que usa: {json.dumps(persona_voice.get('phrases_uses', [])[:5], ensure_ascii=False)}\n"
+            f"Opiniones fuertes: {json.dumps(persona_voice.get('strong_opinions', [])[:3], ensure_ascii=False)}\n"
+            f"Estilo: {persona_voice.get('writing_style', '')}\n"
+        )
+
     result = await complete(
         prompt=prompts.DRAFT_USER.format(
             title=title,
+            keyword=brief.get("keyword", title),
+            search_intent=brief.get("search_intent", "informational"),
             h2_sections=json.dumps(brief.get("h2_sections", []), ensure_ascii=False),
             key_points=json.dumps(brief.get("key_points", []), ensure_ascii=False),
             faq_questions=json.dumps(brief.get("faq_questions", []), ensure_ascii=False),
-            data_points_needed=json.dumps(brief.get("data_points_needed", []), ensure_ascii=False),
-            cta_placement=brief.get("cta_placement", "natural"),
             first_paragraph_hook=brief.get("first_paragraph_hook", ""),
             target_word_count=brief.get("target_word_count", 1500),
             client_intelligence=brand.get("client_intelligence", ""),
@@ -656,12 +665,12 @@ REVIEWER FEEDBACK ON PREVIOUS VERSION — address ALL points:
         ) + rules_section + feedback_section,
         system=prompts.DRAFT_SYSTEM.format(
             brand_persona=brand.get("brand_persona", "experto en el tema"),
-            brand_tone=brand.get("brand_tone", "directo, honesto, útil"),
             partner_name=brand.get("partner_name", ""),
             client_intelligence=brand.get("client_intelligence", ""),
+            persona_block=persona_block,
         ),
         model="sonnet",
-        max_tokens=8192,
+        max_tokens=12000,
         json_mode=True,
         pipeline_step="draft",
         run_id=run_id,

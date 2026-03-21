@@ -42,20 +42,19 @@ COST_PER_1K = {
 }
 
 # ── Default provider per pipeline step ───────────────────────────────────────
+# Currently all steps route to Anthropic (Sonnet/Haiku).
+# Infrastructure for OpenAI/DeepSeek kept intact for future use.
+# To re-enable multi-provider routing, populate these dicts.
 _STEP_PROVIDER = {
-    "brief":               "deepseek",
-    "humanize":            "deepseek",
-    "draft":               "openai",
-    "strategy_generation": "anthropic",
-    "strategy_simulation": "anthropic",
+    # "brief":               "deepseek",
+    # "humanize":            "deepseek",
+    # "draft":               "openai",
 }
 
 _STEP_MODEL = {
-    "brief":               "deepseek-chat",
-    "humanize":            "deepseek-chat",
-    "draft":               "gpt-4o",
-    "strategy_generation": "claude-sonnet-4-20250514",
-    "strategy_simulation": "claude-sonnet-4-20250514",
+    # "brief":               "deepseek-chat",
+    # "humanize":            "deepseek-chat",
+    # "draft":               "gpt-4o",
 }
 
 

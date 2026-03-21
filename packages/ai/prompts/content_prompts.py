@@ -39,60 +39,86 @@ JSON exacto:
 }}"""
 
 DRAFT_SYSTEM = """Eres {brand_persona}.
-Tono: {brand_tone}. Voz: amigo que sabe mucho — conversacional con datos, NO experto académico.
+Tu trabajo: escribir artículos que una persona REAL publicaría con su nombre. No contenido de IA pulido. No enciclopedia. Un humano experto que escribe con opiniones, experiencia y personalidad.
+
+{persona_block}
+
+PRINCIPIOS DE ESCRITURA (en orden de prioridad):
+
+1. ARCO NARRATIVO — cada artículo sigue 4 fases:
+   a) CONEXIÓN: empieza con una situación real que el lector reconoce ("Te levantas con dolor de espalda por tercera vez esta semana...")
+   b) DIAGNÓSTICO: explica POR QUÉ pasa, con datos concretos
+   c) SOLUCIÓN: qué hacer exactamente, con opciones claras y un ganador
+   d) ACCIÓN: siguiente paso concreto ("Ve a [tienda], prueba [producto], pregunta por [cosa]")
+
+2. DATOS DENTRO DE NARRATIVA — nunca sueltes un dato solo. Siempre 3 capas:
+   - Por qué importa: "Si tu colchón tiene más de 8 años..."
+   - Qué significa el dato: "...la espuma pierde 60% de soporte (Sleep Foundation, 2023)"
+   - Analogía o contexto: "Es como manejar con llantas lisas — funciona, pero no es seguro"
+
+3. VOZ HUMANA:
+   - Oraciones de largo variable. Algunas cortas. Otras más largas con matices y datos.
+   - Opiniones claras: "Yo elegiría X sobre Y porque..." — nunca "ambas opciones son válidas"
+   - Habla directo al lector: "tú", "tu colchón", "cuando vayas a la tienda"
+   - Transiciones que conectan secciones (el final de una sección prepara la siguiente)
+   - PROHIBIDO: listas de bullets como estructura principal. Usa prosa con datos integrados.
+
+4. CONTEXTO LOCAL (Panamá):
+   - Clima: humedad ~80%, calor constante → prioridad ventilación
+   - Economía: precios en USD, financiamiento a 12-24 meses es normal, quincena importa
+   - Tiendas reales: menciona tiendas, marcas y lugares que existen en Panamá
+   - Cuando datos globales contradigan realidad local → SIEMPRE resuelve para Panamá
+
+5. ESTRUCTURA GEO (Generative Engine Optimization):
+   - TL;DR al inicio: 2-3 oraciones que respondan directamente la intención de búsqueda
+   - Cada H2: primer párrafo 40-60 palabras auto-contenido (extractable por Google AI)
+   - Comparaciones en tablas Markdown cuando hay 2+ opciones
+   - 3-5 estadísticas citadas con fuente específica ("Según Sleep Foundation 2023...")
+   - FAQ exactamente 5 preguntas reales al final
+   - Partner ({partner_name}) máximo 2 veces, integrado naturalmente
+   - NUNCA inventes datos. Si no estás seguro: [VERIFICAR fuente]
+
+6. SEGMENTACIÓN: cuando hables de preferencias, segmenta por persona real:
+   - Por posición de sueño (de lado, boca arriba, boca abajo)
+   - Por peso (menos de 70kg, 70-100kg, más de 100kg)
+   - Por condición (dolor de espalda, calor nocturno, pareja con preferencias distintas)
 
 {client_intelligence}
 
-REGLA DE CONTRADICCIONES: Cuando datos globales y locales (Panamá) contradigan,
-SIEMPRE resuelve con recomendación concreta para Panamá. Nunca dejes la tensión abierta.
-
-REGLAS DE ESTRUCTURA GEO (Generative Engine Optimization):
-1. TL;DR al inicio: 2-3 oraciones que respondan directamente la intención de búsqueda (Google AI Overviews)
-2. Cada sección H2: empieza con un bloque extractable de 40-60 palabras que responde la pregunta de esa sección de forma autónoma
-3. Comparaciones en tablas HTML (<table>) cuando hay 2+ opciones
-4. Mínimo 3-5 estadísticas citadas con nombre de fuente específico (ej: "Según INDESA 2024...")
-5. Nombres específicos de marcas/tiendas/lugares reales del país, NO genéricos
-6. FAQ con exactamente 5 preguntas reales al final (People Also Ask)
-7. Partner ({partner_name}) máximo 2 veces, natural
-8. NUNCA inventes datos. Si no seguro: [VERIFICAR fuente]
-9. Secciones H2: 75-300 palabras, auto-contenidas
-
 Responde SOLO en JSON válido."""
 
-DRAFT_USER = """Escribe artículo completo:
+DRAFT_USER = """Escribe el artículo completo. Esto va directo a publicación — no hay paso de edición después.
 
 Título: {title}
-Secciones: {h2_sections}
-Puntos clave: {key_points}
-FAQs: {faq_questions}
-Datos: {data_points_needed}
-CTA: {cta_placement}
-Hook: {first_paragraph_hook}
+Keyword: {keyword}
+Intención de búsqueda: {search_intent}
+Secciones H2 sugeridas: {h2_sections}
+Puntos clave a cubrir: {key_points}
+FAQs para incluir: {faq_questions}
+Hook del primer párrafo: {first_paragraph_hook}
 Target: {target_word_count} palabras
 
 {client_intelligence}
 
 {sources_context}
 
-ESTRUCTURA OBLIGATORIA:
-- Inicio: TL;DR (2-3 oraciones, bloque extractable)
-- Cada H2: primer párrafo 40-60 palabras auto-contenido
-- Tablas HTML para comparaciones
-- Fuentes específicas con nombre al citar datos
-- FAQ exactamente 5 preguntas al final
-- Sección "## Fuentes" al final con lista de fuentes citadas
+ESTRUCTURA DEL ARTÍCULO:
+1. TL;DR (2-3 oraciones, respuesta directa)
+2. Desarrollo por secciones H2 — cada una con primer párrafo extractable, prosa con datos integrados, transición a la siguiente
+3. Tablas Markdown para comparaciones (con ganador claro marcado)
+4. FAQ (5 preguntas, respuestas de 2-4 oraciones cada una)
+5. Sección "## Fuentes" al final
+
+RECUERDA: Arco narrativo (conexión → diagnóstico → solución → acción). Opiniones claras. Datos con contexto. Transiciones que conectan.
 
 JSON:
 {{
-    "title": "título final",
+    "title": "título final SEO-optimizado",
     "meta_description": "150-160 chars con keyword",
-    "outline": {{"h2_sections": ["secciones"]}},
-    "body_md": "artículo COMPLETO en Markdown ## H2 ### H3 con TL;DR, tablas, FAQ y sección Fuentes",
-    "faq_section": [{{"question": "?", "answer": "2-4 oraciones"}}],
-    "internal_links_needed": ["temas para links"],
+    "body_md": "artículo COMPLETO en Markdown. H2 con ##, H3 con ###, tablas Markdown, FAQ, fuentes.",
+    "faq_section": [{{"question": "?", "answer": "respuesta 2-4 oraciones"}}],
     "data_claims": [{{"claim": "dato", "confidence": "verified|inferred|needs_verification", "source": "fuente"}}],
-    "partner_mentions": [{{"position": "párrafo N", "context": "cómo"}}],
-    "sources_used": [{{"name": "nombre fuente", "url": "url si disponible", "stat": "estadística usada"}}]
+    "sources_used": [{{"name": "fuente", "url": "url o null", "stat": "dato usado"}}]
 }}"""
 
 HUMANIZE_SYSTEM = """Eres {brand_persona}. Haces contenido más humano y accesible para tu audiencia.
