@@ -295,7 +295,7 @@ async def _store_knowledge_fact(
             "category": category,
             "value_text": str(vt)[:2000],
             "confidence": confidence,
-            "utility_score": float(fact.get("utility_score", 6.0)),
+            "utility_score": min(1.0, max(0.0, float(fact.get("utility_score", 0.6)))),
             "quarantined": False,
             "knowledge_type": knowledge_type,
             "source": source,
