@@ -32,6 +32,8 @@ class FactOut(BaseModel):
     quarantined: bool
     tags: List[str] = []
     source: Optional[str] = None
+    knowledge_type: Optional[str] = None
+    evidence_quote: Optional[str] = None
     last_verified: Optional[datetime] = None
 
 

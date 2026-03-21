@@ -47,6 +47,8 @@ async def list_facts(
     category: Optional[str] = Query(None),
     entity_id: Optional[str] = Query(None),
     quarantined: Optional[bool] = Query(None),
+    source: Optional[str] = Query(None),
+    knowledge_type: Optional[str] = Query(None),
     limit: int = Query(100, le=500),
 ):
     try:
@@ -62,6 +64,10 @@ async def list_facts(
             params["entity_id"] = f"eq.{entity_id}"
         if quarantined is not None:
             params["quarantined"] = f"eq.{str(quarantined).lower()}"
+        if source:
+            params["source"] = f"eq.{source}"
+        if knowledge_type:
+            params["knowledge_type"] = f"eq.{knowledge_type}"
         return await db.query("intelligence_facts", params=params)
     except Exception as e:
         logger.error(f"list_facts {site_id}: {e}", exc_info=True)
