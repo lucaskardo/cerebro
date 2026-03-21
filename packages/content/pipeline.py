@@ -147,13 +147,19 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                 if neg_rules:
                     neg_lines = []
                     for r in neg_rules:
-                        line = f"- [{r['category']}] {r['rule_text']}"
+                        line = f"❌ [{r['category']}] {r['rule_text']}"
                         if r.get("rule_context"):
-                            line += f" (when: {r['rule_context']})"
+                            line += f" (cuando: {r['rule_context']})"
                         if r.get("rule_exception"):
-                            line += f" (except: {r['rule_exception']})"
+                            line += f" (excepción: {r['rule_exception']})"
                         neg_lines.append(line)
-                    sections.append("DO NOT (prohibiciones):\n" + "\n".join(neg_lines))
+                    sections.append(
+                        "⛔ FRASES Y COMPORTAMIENTOS ABSOLUTAMENTE PROHIBIDOS — "
+                        "si aparece CUALQUIERA de estos en tu texto, el artículo será RECHAZADO automáticamente:\n"
+                        + "\n".join(neg_lines)
+                        + "\n\nEl sistema tiene un filtro automático post-generación. "
+                        "Usar estas frases elimina puntos de calidad y puede causar re-generación completa."
+                    )
                 if pos_rules:
                     pos_lines = []
                     for r in pos_rules:

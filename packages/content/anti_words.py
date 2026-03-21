@@ -1,6 +1,7 @@
 """
 CEREBRO v7 — Anti-AI Words Filter
 Removes generic AI phrases that make content sound robotic and unnatural.
+Also enforces domain-specific banned phrases with smart replacements.
 """
 import re
 from typing import Tuple
@@ -126,7 +127,36 @@ ANTI_WORDS: list[str] = [
     "no podemos ignorar",
     "no hay que olvidar que",
     "debemos tener presente",
+    # Clickbait específico detectado en output
+    "te lo digo claro",
+    "la verdad que nadie te cuenta",
+    "la verdad que nadie",
+    "esto te va a sorprender",
+    "no vas a creer",
+    "te cuento algo",
+    "y aquí viene lo importante",
+    "spoiler",
 ]
+
+# Phrases that need smart replacement (not just deletion)
+# Key = phrase to find (case-insensitive), Value = replacement string
+BANNED_REPLACEMENTS: dict[str, str] = {
+    "dormidores": "personas que duermen de lado",
+    "dolor matutino": "dolor al levantarte",
+    "superficie de descanso": "colchón",
+    "experiencias de sueño": "cómo duermes",
+    "experiencia de sueño": "cómo duermes",
+    "firmeza óptima": "firmeza adecuada",
+    "confort térmico": "temperatura al dormir",
+    "el secreto de": "",
+    "los secretos de": "",
+    "descubre cómo": "mira cómo",
+    "descubre qué": "mira qué",
+    "descubre los": "conoce los",
+    "descubre las": "conoce las",
+    "descubre el": "conoce el",
+    "descubre la": "conoce la",
+}
 
 # Compile pattern once for performance
 _PATTERN = re.compile(
@@ -134,22 +164,46 @@ _PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 
+# Compile replacements pattern (longest first to avoid partial matches)
+_SORTED_REPLACEMENTS = sorted(BANNED_REPLACEMENTS.keys(), key=len, reverse=True)
+_REPLACEMENTS_PATTERN = re.compile(
+    r'\b(' + '|'.join(re.escape(p) for p in _SORTED_REPLACEMENTS) + r')\b',
+    flags=re.IGNORECASE,
+)
+
 
 def clean_anti_words(text: str) -> Tuple[str, list[str]]:
     """
-    Remove AI-sounding filler phrases from text.
+    Remove AI-sounding filler phrases and enforce banned phrase replacements.
 
     Returns:
-        (cleaned_text, list_of_removed_phrases)
+        (cleaned_text, list_of_removed_or_replaced_phrases)
     """
     removed = []
 
-    def _replace(match: re.Match) -> str:
+    # Step 1: Apply smart replacements first
+    def _smart_replace(match: re.Match) -> str:
+        phrase = match.group(0)
+        key = phrase.lower()
+        replacement = BANNED_REPLACEMENTS.get(key, "")
+        # Try case-insensitive lookup
+        if replacement == "" and key not in BANNED_REPLACEMENTS:
+            for k, v in BANNED_REPLACEMENTS.items():
+                if k.lower() == key:
+                    replacement = v
+                    break
+        removed.append(f"{phrase.lower()} → {replacement or '(removed)'}")
+        return replacement
+
+    text = _REPLACEMENTS_PATTERN.sub(_smart_replace, text)
+
+    # Step 2: Remove anti-words
+    def _remove(match: re.Match) -> str:
         phrase = match.group(0)
         removed.append(phrase.lower())
         return ""
 
-    cleaned = _PATTERN.sub(_replace, text)
+    cleaned = _PATTERN.sub(_remove, text)
     # Clean up double spaces and leading commas left by removal
     cleaned = re.sub(r'\s{2,}', ' ', cleaned)
     cleaned = re.sub(r',\s*,', ',', cleaned)
