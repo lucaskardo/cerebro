@@ -1,5 +1,11 @@
 # CEREBRO — Autonomous Growth Operating System
 
+## Architecture Source of Truth
+ALWAYS read `docs/CEREBRO-Architecture.md` before making architecture decisions.
+Contains: vision, 7 principles, 4 laws, 4-layer engine design, 9 data layers, 6 specialist agents (including Content Craft Agent), repo structure rules, tool policy, roadmap with hard gates, and anti-patterns.
+If a decision contradicts this document, STOP and flag it.
+If the plan needs to change, update this document FIRST, then implement.
+
 ## SPEED RULES (MANDATORY)
 - NEVER use brainstorming, writing-plans, or code-reviewer skills
 - NEVER use worktrees — work directly on main
