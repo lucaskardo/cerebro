@@ -238,6 +238,10 @@ function ContentPageContent() {
 
   async function handleFeedback(decision: FeedbackPayload["decision"]) {
     if (!previewArticle) return;
+    if (decision === "approve" && previewArticle?.status === "approved") {
+      closePreview();
+      return;
+    }
     if (decision === "regenerate" && !feedbackReason) {
       addToast("Selecciona una razón para regenerar", false); return;
     }
@@ -349,7 +353,7 @@ function ContentPageContent() {
             </div>
 
             {/* Review panel — only for reviewable articles */}
-            {previewArticle?.status === "review" && previewArticle?.body_html && (
+            {(previewArticle?.status === "review" || previewArticle?.status === "approved") && previewArticle?.body_html && (
               <div style={{ padding: "16px 20px", borderTop: "1px solid var(--dash-border)" }}>
 
                 <div style={{ marginBottom: "10px" }}>
@@ -405,7 +409,7 @@ function ContentPageContent() {
                   </button>
                   <button onClick={() => handleFeedback("approve")} disabled={submittingFeedback}
                     style={{ padding: "8px 14px", borderRadius: "8px", cursor: "pointer", border: "none", background: "var(--dash-accent)", color: "#000", fontWeight: 600, fontSize: "0.8rem" }}>
-                    Aprobar
+                    {previewArticle?.status === "approved" ? "Cerrar" : "Aprobar"}
                   </button>
                 </div>
               </div>
@@ -611,13 +615,20 @@ function ContentPageContent() {
                             }}>Revisar</button>
                           )}
                           {item.status === "approved" && (
-                            <Link
-                              href={`/articulo/${item.slug}`}
-                              target="_blank"
-                              style={{ padding: "0.25rem 0.625rem", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600, border: "1px solid var(--dash-border)", color: "var(--dash-text-dim)", textDecoration: "none" }}
-                            >
-                              Ver →
-                            </Link>
+                            <>
+                              <Link
+                                href={`/articulo/${item.slug}`}
+                                target="_blank"
+                                style={{ padding: "0.25rem 0.625rem", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600, border: "1px solid var(--dash-border)", color: "var(--dash-text-dim)", textDecoration: "none" }}
+                              >
+                                Ver →
+                              </Link>
+                              <button onClick={() => openPreview(item)} style={{
+                                padding: "4px 10px", borderRadius: "6px", cursor: "pointer",
+                                border: "1px solid var(--dash-border)", background: "transparent",
+                                color: "var(--dash-text-dim)", fontSize: "0.75rem",
+                              }}>Actualizar</button>
+                            </>
                           )}
                           {item.status === "error" && (
                             <>
