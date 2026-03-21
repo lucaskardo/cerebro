@@ -138,34 +138,35 @@ async def run_pipeline(keyword: str, mission_id: str, asset_id: str = None, site
                 elif r["scope"] == "category" and r.get("scope_ref"):
                     applicable.append(r)
 
-            # Polarity balance: max 3 negative + 4 positive, max 1 per category, max 7 total
-            seen_categories: set = set()
-            neg_rules, pos_rules = [], []
-            for r in applicable:
-                cat = r.get("category", "other")
-                if cat in seen_categories:
-                    continue
-                seen_categories.add(cat)
-                polarity = r.get("rule_polarity") or "negative"
-                if polarity == "positive":
-                    pos_rules.append(r)
-                else:
-                    neg_rules.append(r)
-            balanced = pos_rules[:4] + neg_rules[:3]
-            applicable = balanced[:7]
+            # Include ALL applicable rules — no per-category cap, no polarity cap
+            neg_rules = [r for r in applicable if (r.get("rule_polarity") or "negative") != "positive"]
+            pos_rules = [r for r in applicable if (r.get("rule_polarity") or "negative") == "positive"]
 
             if applicable:
-                lines = []
-                for r in applicable:
-                    line = f"- [{r['category']}] {r['rule_text']}"
-                    if r.get("rule_context"):
-                        line += f" (when: {r['rule_context']})"
-                    if r.get("rule_exception"):
-                        line += f" (except: {r['rule_exception']})"
-                    lines.append(line)
-                rules_prompt_section = "\n".join(lines)
+                sections = []
+                if neg_rules:
+                    neg_lines = []
+                    for r in neg_rules:
+                        line = f"- [{r['category']}] {r['rule_text']}"
+                        if r.get("rule_context"):
+                            line += f" (when: {r['rule_context']})"
+                        if r.get("rule_exception"):
+                            line += f" (except: {r['rule_exception']})"
+                        neg_lines.append(line)
+                    sections.append("DO NOT (prohibiciones):\n" + "\n".join(neg_lines))
+                if pos_rules:
+                    pos_lines = []
+                    for r in pos_rules:
+                        line = f"- [{r['category']}] {r['rule_text']}"
+                        if r.get("rule_context"):
+                            line += f" (when: {r['rule_context']})"
+                        if r.get("rule_exception"):
+                            line += f" (except: {r['rule_exception']})"
+                        pos_lines.append(line)
+                    sections.append("SÍ HACER (obligatorio):\n" + "\n".join(pos_lines))
+                rules_prompt_section = "\n\n".join(sections)
                 active_rule_ids = [r["id"] for r in applicable]
-                logger.info(f"[{run_id}] Loaded {len(applicable)} content rules")
+                logger.info(f"[{run_id}] Loaded {len(applicable)} content rules ({len(neg_rules)} neg, {len(pos_rules)} pos)")
 
             # Increment times_applied for all applied rules
             if active_rule_ids:
