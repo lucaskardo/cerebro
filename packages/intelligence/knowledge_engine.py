@@ -31,143 +31,191 @@ MAX_CHUNKS = 5      # max chunks per URL to avoid runaway
 # Only create entities for these types — NOT for generic materials/concepts
 ENTITY_TYPES_ALLOWED = {"brand", "product", "store", "segment", "competitor", "competitor_product"}
 
-# ── Cold start topics (10 domains × 6 facts = 60 llm_seed facts) ─────────────
+# ── Cold start topics (6 domains × 10 facts = 60 llm_seed facts) ─────────────
 
 COLD_START_TOPICS = [
     {
         "domain": "material_science",
         "category": "product",
         "query": (
-            "tipos de espuma para colchones: memory foam, espuma HR, látex, resortes pocket, híbrido. "
-            "Densidades recomendadas (kg/m3), ILD ideal por tipo de dormidor, vida útil esperada."
+            "CIENCIA DE MATERIALES para colchones (10 hechos con datos específicos):\n"
+            "- Qué es ILD y cómo se mide (Indentation Load Deflection, fuerza para comprimir espuma 25%)\n"
+            "- Rangos de densidad de espuma y qué significan para durabilidad (PCF o kg/m³)\n"
+            "- Memory foam vs látex vs polyfoam vs resortes pocket — propiedades de cada material\n"
+            "- Cómo la estructura celular de la espuma afecta transpirabilidad y retención de calor\n"
+            "- Cómo la humedad afecta la degradación de espuma con el tiempo\n"
+            "- Rangos de ILD: muy suave (ILD 8-12), suave (13-17), medio (18-24), firme (25-31), muy firme (32+)\n"
+            "- Diferencia entre espuma de alta densidad (HD) vs baja densidad en términos de durabilidad\n"
+            "- Propiedades del látex natural vs látex sintético vs blended\n"
+            "- Coils de resortes: Bonnell vs pocket vs offset — diferencias de aislamiento de movimiento\n"
+            "- Certificaciones de espuma: CertiPUR-US, OEKO-TEX, Greenguard — qué garantizan"
         ),
     },
     {
-        "domain": "health_sleep",
+        "domain": "construction",
         "category": "product",
         "query": (
-            "firmeza de colchón según peso corporal: guía práctica. "
-            "Recomendaciones para personas <60kg, 60-90kg, >90kg, parejas con diferente peso."
+            "CONSTRUCCIÓN E INGENIERÍA de colchones (10 hechos con datos específicos):\n"
+            "- Capa de confort vs capa de transición vs núcleo de soporte — qué hace cada una\n"
+            "- Soporte zonificado — qué es y por qué importa para alineación espinal\n"
+            "- Tipos de coils: Bonnell, pocket, offset — trade-offs de durabilidad y confort\n"
+            "- Métodos de construcción de soporte de borde y por qué importa\n"
+            "- Cómo la altura total del colchón (cm) se relaciona con calidad de soporte\n"
+            "- Conteo de resortes: cuándo más resortes sí importa (y cuándo no)\n"
+            "- Diferencia entre colchón híbrido (espuma + resortes) vs todo espuma vs todo resortes\n"
+            "- Materiales de cubierta: algodón orgánico, tela viscosa, materiales de cambio de fase\n"
+            "- Construcción de colchones para climas húmedos: canales de ventilación, ventanas de aire\n"
+            "- Cómo la base/somier afecta el rendimiento y durabilidad del colchón"
         ),
     },
     {
         "domain": "health_sleep",
         "category": "audience",
         "query": (
-            "posiciones para dormir y dolor de espalda: de lado, boca arriba, boca abajo. "
-            "Qué tipo de colchón o almohada minimiza el dolor lumbar en cada posición."
+            "SALUD DEL SUEÑO Y ERGONOMÍA (10 hechos con datos específicos):\n"
+            "- Alineación espinal por posición de sueño: de lado, boca arriba, boca abajo\n"
+            "- Puntos de presión: hombros y caderas para dormidores de lado\n"
+            "- Cómo el peso corporal afecta necesidades de firmeza (<60kg, 60-90kg, >90kg)\n"
+            "- Regulación de temperatura y calidad del sueño (temperatura ideal de habitación)\n"
+            "- Colchón y dolor de espalda: causas y soluciones con datos\n"
+            "- Señales de que un colchón ya no sirve: hundimiento en mm, pérdida de confort\n"
+            "- Recomendación de firmeza por posición: de lado (suave-medio), espalda (medio-firme), estómago (firme)\n"
+            "- Cómo el colchón afecta calidad del sueño: latencia, duración, interrupciones\n"
+            "- Alergias y colchones: ácaros del polvo, materiales hipoalergénicos\n"
+            "- Sueño en pareja: diferencias de peso >15kg requieren qué soluciones"
         ),
     },
     {
-        "domain": "health_sleep",
-        "category": "audience",
-        "query": (
-            "señales de que un colchón ya no sirve: hundimiento, puntos de presión, "
-            "despertar con dolor, alergias. Cuándo es momento de cambiar el colchón."
-        ),
-    },
-    {
-        "domain": "health_sleep",
-        "category": "market",
-        "query": (
-            "temperatura corporal y sueño en climas tropicales: cómo el calor afecta la calidad del sueño. "
-            "Materiales que retienen más calor vs materiales que respiran mejor."
-        ),
-    },
-    {
-        "domain": "product",
+        "domain": "durability",
         "category": "product",
         "query": (
-            "construcción interna de colchones: capa de confort, capa de soporte, cubierta. "
-            "Número de resortes, calibre del alambre, capas de espuma, altura total ideal."
+            "DURABILIDAD Y MANTENIMIENTO de colchones (10 hechos con datos específicos):\n"
+            "- Vida útil promedio por tipo: todo-espuma, híbrido, resortes, látex (en años)\n"
+            "- Factores que aceleran degradación: humedad, peso, frecuencia de uso\n"
+            "- Umbrales de hundimiento que indican necesidad de reemplazo (en cm o mm)\n"
+            "- Cómo la base/somier afecta la longevidad del colchón\n"
+            "- Cobertura típica de garantía: qué incluye vs qué excluye\n"
+            "- Rotación e inversión del colchón: frecuencia recomendada\n"
+            "- Protectores de colchón: qué protegen y su efecto en durabilidad\n"
+            "- Densidad mínima de espuma para >7 años de vida útil (en kg/m³ o PCF)\n"
+            "- Efectos de la humedad >70% en foam: aceleración de degradación porcentual\n"
+            "- Diferencia de durabilidad entre colchón económico (<$300) vs premium (>$800)"
         ),
     },
     {
-        "domain": "product",
-        "category": "product",
-        "query": (
-            "durabilidad de colchones: factores que determinan cuánto dura. "
-            "Densidad mínima aceptable, indicadores de calidad, diferencia entre económico y premium."
-        ),
-    },
-    {
-        "domain": "objections",
-        "category": "objection",
-        "query": (
-            "objeciones más comunes al comprar colchón: precio alto, no poder probarlo, "
-            "miedo a equivocarse, diferencias entre marcas. Respuestas basadas en datos."
-        ),
-    },
-    {
-        "domain": "positioning",
-        "category": "differentiator",
-        "query": (
-            "qué diferencia a un colchón premium de uno económico: materiales, garantía, "
-            "periodo de prueba, certificaciones, atención al cliente. Justificación del precio."
-        ),
-    },
-    {
-        "domain": "market",
+        "domain": "buying_guidance",
         "category": "market",
         "query": (
-            "tendencias globales en la industria de colchones: e-commerce, modelos boxed, "
-            "periodos de prueba de 100 noches, certificaciones CertiPUR, mercado latinoamericano."
+            "GUÍA DE COMPRA de colchones (10 hechos con datos específicos):\n"
+            "- Escala de firmeza 1-10 de la industria: cómo mapea a rangos de ILD\n"
+            "- Matriz de posición de sueño → firmeza recomendada\n"
+            "- Matriz de peso corporal → firmeza recomendada\n"
+            "- Períodos de prueba y políticas de devolución: estándares de la industria (noches)\n"
+            "- Costo por noche como marco de valor (precio del colchón / vida útil en noches)\n"
+            "- Qué preguntar antes de comprar: 5 preguntas clave al vendedor\n"
+            "- Diferencia entre colchón de tienda física vs online-only: ventajas/desventajas\n"
+            "- Períodos de adaptación: cuánto tiempo tarda en adaptarse a un colchón nuevo (semanas)\n"
+            "- Certificaciones que importan al comprar vs las que son solo marketing\n"
+            "- Cuándo vale la pena gastar más en un colchón (factores que justifican precio premium)"
+        ),
+    },
+    {
+        "domain": "tropical_climate",
+        "category": "market",
+        "query": (
+            "CONSIDERACIONES PARA CLIMA TROPICAL/HÚMEDO como Panamá (10 hechos con datos específicos):\n"
+            "- Cómo la humedad >70% acelera la descomposición de espuma (porcentaje de reducción de vida útil)\n"
+            "- Mejores materiales para climas tropicales: látex abierto, resortes con cubierta transpirable\n"
+            "- Materiales a evitar en climas húmedos y por qué\n"
+            "- Ventilación y flujo de aire en construcción de colchones para trópico\n"
+            "- Riesgos de moho y alergenos en ambientes húmedos: condiciones que los generan\n"
+            "- Cuidado del colchón en países tropicales: frecuencia de limpieza, ventilación\n"
+            "- Temperatura de superficie del colchón: diferencia entre materiales en climas >28°C\n"
+            "- Cómo el aire acondicionado vs ventilación natural afecta la elección del colchón\n"
+            "- Densidad mínima recomendada para clima húmedo vs clima seco (en kg/m³)\n"
+            "- Colchones de látex en trópico: ventajas de resistencia a humedad y ácaros"
         ),
     },
 ]
 
 COLD_START_SYSTEM = """Eres un experto en la industria de colchones, sueño y salud postural.
-Generas hechos concretos y verificables basados en tu conocimiento de entrenamiento.
+Extraes CONOCIMIENTO DE DOMINIO universal: ciencia, principios, datos medibles.
+NO extraes reseñas de productos ni recomendaciones de marcas específicas.
 Responde SOLO en JSON válido. Sin explicaciones fuera del JSON."""
 
-COLD_START_USER = """Genera exactamente 6 hechos específicos y verificables sobre este tema:
-"{query}"
+COLD_START_USER = """Extrae exactamente 10 hechos de CONOCIMIENTO DE DOMINIO sobre este tema:
 
-Contexto: Industria de colchones en Latinoamérica. País específico: Panamá.
+{query}
 
-Para cada hecho, devuelve:
-- fact_key: formato "category.topic.metric" usando hyphens, ej: "product.memory-foam.density"
-- category: una de [pricing, positioning, audience, competitor, content, product, market, performance, objection, trigger, differentiator, other]
-- value_text: el hecho concreto en 1-3 oraciones. Específico con datos cuando sea posible.
-- confidence: 0.0-1.0 (tu confianza en que este dato es correcto)
-- evidence_quote: cita o referencia específica que respalda el hecho (puede ser principio científico, estudio, o fuente conocida)
-- entity_name: nombre de marca/producto/tienda específica SI aplica, null si es conocimiento genérico
+REGLAS CRÍTICAS:
+- Cada hecho DEBE incluir datos específicos: números, medidas, rangos, o condiciones
+- NO menciones marcas estadounidenses/europeas (WinkBed, Casper, Saatva, Helix, Purple, etc.)
+- NO extraigas reseñas de productos ni listas de "mejores colchones"
+- SÍ extrae principios universales aplicables a CUALQUIER marca
+- Contexto: negocio de colchones en Panamá (clima tropical, humedad alta)
+
+Para cada hecho:
+- fact_key: "category.topic.metric" con hyphens, ej: "product.memory-foam.density-range"
+- category: una de [pricing, positioning, audience, product, market, performance, objection, differentiator, other]
+- value_text: el hecho completo con datos en 1-3 oraciones
+- confidence: 0.6-0.8 (son datos de entrenamiento LLM, no fuentes verificadas)
+- utility_score: 0.4-0.7 (llm_seed tiene menor prioridad que authority_claim)
+- evidence_quote: la frase clave o dato que hace este hecho verificable (principio científico, estudio, o referencia conocida)
+- entity_name: null (NO usar entity_name para conocimiento genérico)
+
+EJEMPLOS BUENOS:
+- "ILD (Indentation Load Deflection) mide firmeza: ILD 10 = muy suave, ILD 50 = muy firme. Mide la fuerza en Newtons necesaria para comprimir espuma un 25%."
+- "La espuma con densidad menor a 40 kg/m³ (1.5 PCF) se degrada significativamente más rápido, especialmente con humedad >60%. Para climas tropicales se recomienda mínimo 45 kg/m³ (1.8 PCF)."
+- "Los dormidores de lado necesitan ILD 14-22 en la capa de confort para permitir 5-7cm de hundimiento en hombros mientras mantienen alineación espinal."
+
+EJEMPLOS MALOS (NO extraer):
+- "El WinkBed está disponible en cuatro opciones de firmeza" (reseña de producto)
+- "El Casper Original cuesta $995" (precio de marca específica)
+- "Los colchones son importantes para el sueño" (sin datos, vago)
 
 JSON:
 {{"facts": [
   {{
     "fact_key": "product.memory-foam.heat-retention",
     "category": "product",
-    "value_text": "La espuma memory foam retiene más calor que el látex o los resortes, con temperaturas 2-3°C más altas en la superficie de contacto, lo que puede afectar el sueño en climas cálidos.",
-    "confidence": 0.85,
-    "evidence_quote": "Journal of Sleep Research: foam density correlates with heat retention",
+    "value_text": "La espuma memory foam retiene 2-3°C más calor que látex o resortes en la superficie de contacto, debido a su estructura celular cerrada que limita el flujo de aire.",
+    "confidence": 0.75,
+    "utility_score": 0.55,
+    "evidence_quote": "Estructura celular cerrada de viscoelástica retiene calor — principio documentado en estudios de termoregulación del sueño",
     "entity_name": null
   }}
 ]}}"""
 
 
-INGEST_SYSTEM = """Eres un extractor de conocimiento experto. Tu tarea es identificar hechos concretos y verificables
-de fuentes de autoridad sobre colchones, sueño y salud postural.
+INGEST_SYSTEM = """Eres un extractor de CONOCIMIENTO DE DOMINIO experto.
+Tu tarea: extraer principios universales, ciencia y conocimiento práctico de fuentes de autoridad sobre colchones y sueño.
+NO extraes reseñas de productos ni listas de "mejores colchones" ni precios de marcas específicas.
+SÍ extraes el conocimiento subyacente que hace válidas esas recomendaciones.
 Responde SOLO en JSON válido."""
 
-INGEST_USER = """Extrae hechos concretos y verificables de este contenido de autoridad:
+INGEST_USER = """Extrae CONOCIMIENTO DE DOMINIO de esta fuente de autoridad:
 
 URL: {url}
 CONTENIDO:
 {content}
 
+REGLA CLAVE: Si la fuente dice "Recomendamos el colchón XYZ para dormidores de lado porque su ILD de 22 permite hundimiento adecuado de hombros":
+- NO extraer: "El colchón XYZ es bueno para dormidores de lado"
+- SÍ extraer: "Los dormidores de lado necesitan ILD 18-25 en la capa de confort para hundimiento adecuado de hombros sin llegar al fondo"
+
 Extrae hasta {max_facts} hechos. Para cada uno:
 - fact_key: "category.topic.metric" con hyphens
-- category: [pricing, positioning, audience, competitor, product, market, performance, objection, trigger, differentiator, other]
-- value_text: el hecho en 1-3 oraciones, lo más específico posible
-- confidence: 0.0-1.0
-- evidence_quote: cita exacta del texto que respalda el hecho (máx 200 chars)
-- entity_name: marca/producto/tienda específica mencionada, null si es genérico
+- category: una de [pricing, positioning, audience, product, market, performance, objection, differentiator, other]
+- value_text: el principio/hecho completo con datos específicos (números, rangos, condiciones)
+- confidence: 0.7-0.95 (según autoridad de la fuente y especificidad del dato)
+- utility_score: 0.5-0.9 (mayor para datos con números específicos, menor para afirmaciones generales)
+- evidence_quote: FRASE EXACTA del texto fuente que respalda este hecho (copia textual, máx 200 chars)
+- entity_name: nombres de marcas/productos mencionados para VINCULACIÓN DE ENTIDAD (no para el hecho en sí), null si no aplica
 
-Solo incluye hechos que sean:
-1. Específicos y accionables (no vagos como "los colchones son importantes")
-2. Verificables desde una fuente de autoridad
-3. Útiles para crear contenido sobre colchones en Panamá
+Solo incluir hechos que sean:
+1. Principios universales con datos (no reseñas de productos específicos)
+2. Verificables: con números, rangos, condiciones medibles
+3. Útiles para crear contenido sobre colchones en Panamá (clima tropical, español)
 
 JSON:
 {{"facts": [...]}}"""
@@ -269,15 +317,24 @@ async def _store_knowledge_fact(
 
     confidence = min(1.0, max(0.0, float(fact.get("confidence", 0.7))))
 
+    # Source priority: authority_content > ai_research > llm_knowledge
+    SOURCE_PRIORITY = {"authority_content": 3, "ai_research": 2, "llm_knowledge": 1}
+
     try:
         existing = await db.query("intelligence_facts", params={
-            "select": "id",
+            "select": "id,source,confidence",
             "site_id": f"eq.{site_id}",
             "fact_key": f"eq.{fact_key}",
             "limit": "1",
         })
         if existing:
-            # Update if this is higher confidence
+            existing_source = existing[0].get("source", "llm_knowledge")
+            existing_priority = SOURCE_PRIORITY.get(existing_source, 0)
+            new_priority = SOURCE_PRIORITY.get(source, 0)
+            # Only update if new source is >= priority (don't overwrite authority with llm_seed)
+            if new_priority < existing_priority:
+                logger.debug(f"Skipping update for {fact_key}: existing {existing_source} > new {source}")
+                return existing[0]["id"]
             await db.update("intelligence_facts", existing[0]["id"], {
                 "value_text": str(vt)[:2000],
                 "confidence": confidence,
@@ -354,7 +411,7 @@ async def cold_start_knowledge(site_id: str) -> dict:
             )
             raw_facts = await _parse_facts_json(result.get("text", ""))
             topic_stored = 0
-            for fact in raw_facts[:6]:
+            for fact in raw_facts[:10]:
                 fact.setdefault("category", topic["category"])
                 entity_id = await _resolve_entity(site_id, fact.get("entity_name"))
                 fid = await _store_knowledge_fact(
