@@ -136,6 +136,15 @@ ANTI_WORDS: list[str] = [
     "te cuento algo",
     "y aquí viene lo importante",
     "spoiler",
+    # Salesy/aggressive phrases (editorial audit session 8.2)
+    "ganador claro",
+    "sin duda alguna",
+    "te están engañando",
+    "lo que nadie te dice",
+    "mi recomendación honesta",
+    "después de evaluar",
+    "después de probar",
+    "esto es lo único que necesitas",
 ]
 
 # Phrases that need smart replacement (not just deletion)
