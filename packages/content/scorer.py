@@ -38,25 +38,34 @@ async def score_content(
     run_id: str = "scorer",
 ) -> dict:
     """Score article on 5 dimensions using Haiku.
-
-    Returns:
-        {
-            humanity: 0-100,
-            specificity: 0-100,
-            structure: 0-100,
-            seo: 0-100,
-            readability: 0-100,
-            total: 0-100,
-            feedback: str
-        }
+    Evaluates 3 samples (beginning, middle, end) for full coverage.
     """
     try:
+        # Build 3 samples: beginning, middle, end (~1500 chars each)
+        total_len = len(body_md)
+        if total_len <= 4500:
+            # Short article: score all of it
+            body_preview = body_md
+        else:
+            chunk = 1500
+            beginning = body_md[:chunk]
+            mid_start = (total_len // 2) - (chunk // 2)
+            middle = body_md[mid_start:mid_start + chunk]
+            end = body_md[-chunk:]
+            body_preview = (
+                beginning
+                + "\n\n[...MIDDLE SECTION...]\n\n"
+                + middle
+                + "\n\n[...END SECTION...]\n\n"
+                + end
+            )
+
         result = await complete(
             prompt=SCORE_PROMPT.format(
                 site_context=site_context or "a content website",
                 keyword=keyword,
                 title=title,
-                body_preview=body_md[:3000],
+                body_preview=body_preview,
             ),
             system="You are a strict content quality evaluator. Return only valid JSON.",
             model="haiku",
@@ -65,14 +74,12 @@ async def score_content(
             run_id=run_id,
         )
         scores = result.get("parsed") or {}
-        # Validate and clamp all numeric fields
         for key in ("humanity", "specificity", "structure", "seo", "readability", "total"):
             val = scores.get(key, 0)
             try:
                 scores[key] = max(0, min(100, int(val)))
             except (TypeError, ValueError):
                 scores[key] = 0
-        # Recompute total from components if not set correctly
         if not scores.get("total"):
             scores["total"] = round(
                 scores["humanity"] * 0.25

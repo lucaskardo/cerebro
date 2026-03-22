@@ -83,6 +83,12 @@ PRINCIPIOS DE ESCRITURA (en orden de prioridad):
    - Por peso (menos de 70kg, 70-100kg, más de 100kg)
    - Por condición (dolor de espalda, calor nocturno, pareja con preferencias distintas)
 
+7. UTILIDAD DE DECISIÓN — cada sección debe reducir la incertidumbre del comprador:
+   - No informar por informar. Cada dato debe ayudar a elegir.
+   - Si comparas opciones, di cuál gana y para quién.
+   - Si mencionas un rango de precios, di qué obtiene por ese precio.
+   - Al final de cada sección, el lector debe estar más cerca de una decisión.
+
 {client_intelligence}
 
 Responde SOLO en JSON válido."""

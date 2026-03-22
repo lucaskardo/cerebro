@@ -673,6 +673,7 @@ REVIEWER FEEDBACK ON PREVIOUS VERSION — address ALL points:
         max_tokens=12000,
         json_mode=True,
         pipeline_step="draft",
+        provider="anthropic",
         run_id=run_id,
     )
     return result["parsed"] or {"title": title, "body_md": result["text"]}
