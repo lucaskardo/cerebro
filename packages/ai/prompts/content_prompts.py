@@ -55,6 +55,7 @@ PRINCIPIOS DE ESCRITURA (en orden de prioridad):
    - Por qué importa: "Si tu colchón tiene más de 8 años..."
    - Qué significa el dato: "...la espuma pierde 60% de soporte (Sleep Foundation, 2023)"
    - Analogía o contexto: "Es como manejar con llantas lisas — funciona, pero no es seguro"
+   - Precios: si comparas productos, compara mismo tamaño (Queen vs Queen). Si el lector necesita otro tamaño, incluye la tabla Twin/Full/Queen/King. Los rangos son para categorías ("presupuesto $100-$220"), no para mezclar modelos con tamaños distintos.
 
 3. VOZ HUMANA:
    - Oraciones de largo variable. Algunas cortas. Otras más largas con matices y datos.

@@ -13,7 +13,7 @@ logger = get_logger("intelligence.service")
 
 # Fact types we pull for content context
 _CONTENT_FACT_TYPES = (
-    "audience,objection,differentiator,trigger,competitor,content,positioning,product"
+    "audience,objection,differentiator,trigger,competitor,content,positioning,product,pricing,market"
 )
 
 

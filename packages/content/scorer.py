@@ -9,7 +9,9 @@ from packages.core import get_logger
 
 logger = get_logger("content.scorer")
 
-SCORE_PROMPT = """Score this article on 5 dimensions (0-100 each). Be strict — 70 is good, 90 is exceptional.
+SCORE_PROMPT = """Note: You are evaluating 3 representative samples from the article (beginning, middle, end), not the full text. The [...MIDDLE SECTION...] and [...END SECTION...] markers indicate sample boundaries — they are NOT missing content or gaps in the article. Score based on the quality of what you see.
+
+Score this article on 5 dimensions (0-100 each). Be strict — 70 is good, 90 is exceptional.
 
 CONTEXT: This article is for {site_context}
 KEYWORD: {keyword}

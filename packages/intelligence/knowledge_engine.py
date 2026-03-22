@@ -631,7 +631,9 @@ async def build_knowledge_context(site_id: str, keyword: str) -> tuple[str, list
 
     authority = _best_per_cat(authority, 6)
     llm_seeds = _best_per_cat(llm_seeds, 4)
-    atomic_local = _best_per_cat(atomic_local, 4)
+    # atomic_local (pricing, market, competitor) — don't dedup by category:
+    # multiple pricing facts per product are all needed (Dr Dream Semi vs Orto vs Pillowtop)
+    atomic_local = atomic_local[:15]
     derived = _best_per_cat(derived, 2)
 
     lines = []
@@ -650,7 +652,34 @@ async def build_knowledge_context(site_id: str, keyword: str) -> tuple[str, list
         for f in atomic_local:
             vt = f.get("value_text") or ""
             vn = f.get("value_number")
-            val = vt if vt else (str(vn) if vn is not None else "")
+            vj = f.get("value_json")
+            if vt:
+                val = vt
+            elif vj and isinstance(vj, dict):
+                # Compose readable text from value_json pricing facts at runtime
+                fk = f.get("fact_key", "")
+                fk_parts = fk.split(".")
+                label = " ".join(fk_parts[1:]).replace("-", " ").title() if len(fk_parts) >= 2 else fk
+                parts = [label]
+                queen = vj.get("queen")
+                retailer = vj.get("retailer", "")
+                financing = vj.get("financing") or {}
+                specs = vj.get("specs", "")
+                if queen is not None:
+                    parts.append(f"Queen ${queen:.2f}")
+                if retailer:
+                    parts.append(f"en {retailer}")
+                monthly = financing.get("monthly_queen")
+                months = financing.get("months")
+                if monthly and months:
+                    parts.append(f"({months} cuotas de ${monthly:.2f}/mes)")
+                if specs:
+                    parts.append(f"— {specs}")
+                val = " ".join(parts)
+            elif vn is not None:
+                val = str(vn)
+            else:
+                val = ""
             if val:
                 lines.append(f"- [{f.get('category','market')}] {val}")
                 fact_ids.append(f["id"])
