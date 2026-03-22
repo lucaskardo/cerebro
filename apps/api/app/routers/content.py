@@ -83,6 +83,90 @@ async def _run_pipeline_bg(keyword: str, mission_id: str, asset_id: str, site_id
         raise
 
 
+@router.post("/api/content/generate-v2")
+async def generate_content_v2(req: ContentGenerate, bg: BackgroundTasks,
+                               request: Request, _auth=Depends(require_auth)):
+    """Agent-based generation: MD builder → single writer LLM call."""
+    budget = await cost_tracker.check_budget()
+    if budget["blocked"]:
+        raise HTTPException(429, "Daily LLM budget exceeded")
+
+    from packages.content.pipeline import _slugify
+    asset = await db.insert("content_assets", {
+        "mission_id": req.mission_id,
+        "title": f"[GENERATING] {req.keyword}",
+        "slug": _slugify(req.keyword),
+        "keyword": req.keyword,
+        "status": "generating",
+        "site_id": req.site_id,
+    })
+    if not asset:
+        raise HTTPException(500, "Failed to create content asset")
+
+    bg.add_task(_run_agent_bg, req.keyword, req.mission_id, asset["id"], req.site_id)
+    await audit(request, "generate_content_v2", "content_assets", asset["id"],
+                {"keyword": req.keyword, "site_id": req.site_id})
+    return {"asset_id": asset["id"], "status": "generating", "keyword": req.keyword}
+
+
+async def _run_agent_bg(keyword: str, mission_id: str, asset_id: str, site_id: str = None):
+    import asyncio
+    import markdown as _md
+    from packages.intelligence.md_builder import build_article_md
+    from packages.content.agent_writer import write_article
+    from packages.core import db
+
+    try:
+        # 1. Build intelligence MD
+        article_md = await build_article_md(keyword, site_id or "")
+
+        # 2. Write article (one LLM call)
+        result = await write_article(article_md, model="sonnet")
+
+        body_md = result.get("body_md", "")
+        title = result.get("title") or keyword
+        meta = result.get("meta_description", "")
+        faq = result.get("faq_section") or []
+
+        # 3. Convert body_md → body_html
+        try:
+            body_html = _md.markdown(body_md, extensions=["tables", "fenced_code"])
+        except Exception:
+            body_html = body_md
+
+        # 4. Save
+        await db.update("content_assets", asset_id, {
+            "title": title,
+            "body_md": body_md,
+            "body_html": body_html,
+            "meta_description": meta,
+            "faq_section": faq,
+            "status": "review",
+            "pipeline_step": "agent_write",
+        })
+        logger.info(f"agent_writer done: {keyword} ({asset_id})")
+
+    except asyncio.CancelledError:
+        logger.error(f"Agent pipeline cancelled: {keyword} ({asset_id})")
+        try:
+            await db.update("content_assets", asset_id, {
+                "status": "error",
+                "error_message": "Pipeline interrupted (process restart)",
+            })
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        logger.error(f"Agent pipeline failed: {keyword} ({asset_id}): {e}")
+        try:
+            await db.update("content_assets", asset_id, {
+                "status": "error",
+                "error_message": str(e)[:500],
+            })
+        except Exception:
+            pass
+
+
 async def _generate_social_drafts_bg(asset_id: str, site_id: str):
     from packages.skills.social_adapter import generate_social_drafts
     try:
